@@ -18,6 +18,7 @@ Funciona en el navegador, sin instalar nada. **Tu PDF no se sube a ningún lado*
   Las que marcás como "no la sabía" vuelven a salir antes.
 - **Exportar** el vocabulario a CSV (se puede importar en Anki).
 - Recuerda en qué página te quedaste en cada PDF.
+- Zoom con dos dedos en el celular, o con Ctrl + rueda / pellizco del touchpad en la compu.
 
 ## Cómo abrirla
 

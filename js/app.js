@@ -75,14 +75,9 @@
   pageInput.addEventListener('change', () => LE.Viewer.goTo(Number(pageInput.value) || 1));
   document.getElementById('prev-page').addEventListener('click', () => LE.Viewer.goTo(LE.Viewer.currentPage - 1));
   document.getElementById('next-page').addEventListener('click', () => LE.Viewer.goTo(LE.Viewer.currentPage + 1));
-  document.getElementById('zoom-in').addEventListener('click', () => {
-    LE.Viewer.zoomIn();
-    updateZoomLabel();
-  });
-  document.getElementById('zoom-out').addEventListener('click', () => {
-    LE.Viewer.zoomOut();
-    updateZoomLabel();
-  });
+  LE.Viewer.onZoom(updateZoomLabel);
+  document.getElementById('zoom-in').addEventListener('click', () => LE.Viewer.zoomIn());
+  document.getElementById('zoom-out').addEventListener('click', () => LE.Viewer.zoomOut());
   document.getElementById('toggle-panel').addEventListener('click', () => {
     document.body.classList.toggle('panel-collapsed');
   });

@@ -113,11 +113,12 @@ button, input { font: inherit; color: inherit; }
 .viewer {
   flex: 1;
   overflow: auto;
+  touch-action: pan-x pan-y; /* pinch zooms the PDF (handled in viewer.js), not the whole page */
   position: relative;
   min-width: 0;
 }
 
-.pages { padding: 20px 12px 60px; }
+.pages { padding: 20px 12px 60px; width: max-content; min-width: 100%; }
 
 .empty-state {
   max-width: 560px;
