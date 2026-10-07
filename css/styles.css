@@ -263,7 +263,6 @@ button, input { font: inherit; color: inherit; }
 .term-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .term { font-size: 22px; font-weight: 700; margin: 0; word-break: break-word; }
 .term.long { font-size: 16px; font-weight: 500; line-height: 1.45; }
-.phonetic { color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
 
 .card {
   margin-top: 12px;
@@ -298,10 +297,6 @@ button, input { font: inherit; color: inherit; }
 
 .pos-group { margin: 4px 0; }
 .pos { font-size: 12px; color: var(--muted); font-style: italic; }
-
-.defs { margin: 4px 0 8px; padding-left: 18px; }
-.defs li { margin: 4px 0; }
-.example { color: var(--muted); font-style: italic; }
 
 .context { line-height: 1.6; }
 .context mark { background: var(--mark); color: inherit; padding: 0 2px; border-radius: 3px; }
@@ -390,6 +385,7 @@ button, input { font: inherit; color: inherit; }
 }
 .flashcard .fc-term { font-size: 26px; font-weight: 700; }
 .flashcard .fc-ctx { margin-top: 10px; color: var(--muted); font-size: 14px; text-align: left; }
+.flashcard .fc-ctx-tr { margin-top: 10px; font-size: 14px; color: var(--muted); text-align: left; }
 .flashcard .fc-source { margin-top: 8px; font-size: 12px; color: var(--muted); }
 .flashcard .fc-answer { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border); }
 .flashcard .fc-answer .translation { font-size: 20px; }

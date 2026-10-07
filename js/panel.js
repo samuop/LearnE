@@ -66,7 +66,6 @@ LE.Panel = (() => {
     const id = ++lookupId;
     showTab('translate');
 
-    const single = LE.isSingleWord(text);
     const isLong = text.length > 60;
     resultBox.textContent = '';
 
@@ -74,47 +73,42 @@ LE.Panel = (() => {
       el('p', { class: 'term' + (isLong ? ' long' : ''), text }),
       ...speakButtons(text),
     ]);
-    const phonetic = el('div', { class: 'phonetic' });
     const trCard = el('div', { class: 'card' }, [
       el('h3', { text: 'Traducción' }),
       el('div', {}, [el('span', { class: 'spinner' }), 'Traduciendo…']),
     ]);
-    resultBox.append(head, phonetic, trCard);
+    resultBox.append(head, trCard);
 
-    const defCard = single ? el('div', { class: 'card' }) : null;
-    if (defCard) resultBox.append(defCard);
-
-    let ctxCard = null;
+    // The sentence around the selection is translated too: it shows what the word means here.
+    let contextTranslation = '';
     if (context && context.length > text.length + 10) {
-      const ctxTr = el('div', { class: 'context-tr' });
-      const ctxBtn = el('button', { class: 'btn small' }, 'Traducir oración');
-      ctxBtn.addEventListener('click', async () => {
-        ctxBtn.disabled = true;
-        ctxTr.textContent = 'Traduciendo…';
-        try {
-          const r = await LE.Translator.translate(context);
+      const ctxTr = el('div', { class: 'context-tr' }, [el('span', { class: 'spinner' }), 'Traduciendo la oración…']);
+      resultBox.append(
+        el('div', { class: 'card' }, [
+          el('h3', { text: 'En el texto' }),
+          el('div', { class: 'context' }, highlighted(context, text)),
+          el('div', { class: 'actions' }, speakButtons(context)),
+          ctxTr,
+        ])
+      );
+      LE.Translator.translate(context).then(
+        (r) => {
+          if (id !== lookupId) return;
+          contextTranslation = r.text;
           ctxTr.textContent = '';
           ctxTr.append(revealable(el('div', { text: r.text })));
-        } catch (error) {
-          ctxTr.textContent = error.message;
+        },
+        (error) => {
+          if (id !== lookupId) return;
           ctxTr.className = 'context-tr error';
-          ctxBtn.disabled = false;
+          ctxTr.textContent = error.message;
         }
-      });
-      ctxCard = el('div', { class: 'card' }, [
-        el('h3', { text: 'En el texto' }),
-        el('div', { class: 'context' }, highlighted(context, text)),
-        el('div', { class: 'actions' }, [ctxBtn, ...speakButtons(context)]),
-        ctxTr,
-      ]);
-      resultBox.append(ctxCard);
+      );
     }
 
     const actions = el('div', { class: 'actions' });
     const provider = el('div', { class: 'provider' });
     resultBox.append(actions, provider);
-
-    const definitionPromise = single ? LE.Translator.define(text).catch(() => null) : Promise.resolve(null);
 
     let translation;
     try {
@@ -153,6 +147,7 @@ LE.Panel = (() => {
             translation: translation.text,
             alternatives: translation.alternatives.map((a) => a.pos + ': ' + a.terms.slice(0, 3).join(', ')).join(' · '),
             context: context || '',
+            contextTranslation,
             source,
             docKey,
             page,
@@ -161,38 +156,6 @@ LE.Panel = (() => {
       });
       refreshSave();
       actions.append(saveBtn);
-    }
-
-    if (defCard) {
-      const def = await definitionPromise;
-      if (id !== lookupId) return;
-      renderDefinition(defCard, def, phonetic);
-    }
-  }
-
-  function renderDefinition(card, def, phonetic) {
-    card.append(el('h3', { text: 'Definición en inglés' }));
-    if (!def) {
-      card.append(el('div', { class: 'hint', text: 'No se encontró en el diccionario (puede ser un término técnico o un nombre).' }));
-      return;
-    }
-    if (def.phonetic) phonetic.textContent = def.phonetic;
-    if (def.audio) {
-      const audioBtn = el('button', { class: 'btn small', title: 'Pronunciación grabada' }, '▶ Audio real');
-      audioBtn.addEventListener('click', () => new Audio(def.audio).play().catch(() => {}));
-      phonetic.append(' ', audioBtn);
-    }
-    for (const meaning of def.meanings) {
-      card.append(
-        el('div', { class: 'pos', text: meaning.pos }),
-        el(
-          'ol',
-          { class: 'defs' },
-          meaning.definitions.map((d) =>
-            el('li', {}, [d.definition, d.example ? el('div', { class: 'example', text: '“' + d.example + '”' }) : null])
-          )
-        )
-      );
     }
   }
 
@@ -340,6 +303,7 @@ LE.Panel = (() => {
     const answer = el('div', { class: 'fc-answer' }, [
       el('div', { class: 'translation', text: card.translation }),
       card.alternatives ? el('div', { class: 'pos', text: card.alternatives }) : null,
+      card.contextTranslation ? el('div', { class: 'fc-ctx-tr', text: card.contextTranslation }) : null,
     ]);
     const flashcard = el('div', { class: 'flashcard' }, [
       el('div', { class: 'fc-term', text: card.term }),

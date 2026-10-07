@@ -1,9 +1,7 @@
 /*
- * Translation (English -> Spanish) and English dictionary lookups.
- * Uses free services that need no API key:
+ * Translation (English -> Spanish), using free services that need no API key:
  *   - Google Translate public endpoint (with dictionary alternatives for single words)
  *   - MyMemory as a fallback when Google fails or rate-limits
- *   - dictionaryapi.dev for English definitions, IPA and pronunciation audio
  */
 LE.Translator = (() => {
   const SOURCE = 'en';
@@ -86,65 +84,5 @@ LE.Translator = (() => {
     throw new Error('No se pudo traducir (' + errors.join(' · ') + '). ¿Tenés conexión a internet?');
   }
 
-  /* Naive English lemmatizer: candidates to try when the exact form is not in the dictionary. */
-  function lemmaCandidates(word) {
-    const w = word.toLowerCase();
-    const out = [w];
-    const add = (c) => c.length > 2 && !out.includes(c) && out.push(c);
-    if (w.endsWith('ies')) add(w.slice(0, -3) + 'y');
-    if (w.endsWith('es')) add(w.slice(0, -2));
-    if (w.endsWith('s') && !w.endsWith('ss')) add(w.slice(0, -1));
-    if (w.endsWith('ied')) add(w.slice(0, -3) + 'y');
-    if (w.endsWith('ed')) {
-      add(w.slice(0, -2));
-      add(w.slice(0, -1));
-      if (/(.)\1ed$/.test(w)) add(w.slice(0, -3));
-    }
-    if (w.endsWith('ing')) {
-      add(w.slice(0, -3));
-      add(w.slice(0, -3) + 'e');
-      if (/(.)\1ing$/.test(w)) add(w.slice(0, -4));
-    }
-    if (w.endsWith('ly')) add(w.slice(0, -2));
-    return out.slice(0, 5);
-  }
-
-  async function define(word) {
-    const key = 'def:' + word.toLowerCase();
-    if (cache.has(key)) return cache.get(key);
-
-    for (const candidate of lemmaCandidates(word)) {
-      try {
-        const entries = await fetchJSON(
-          'https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(candidate),
-          7000
-        );
-        if (!Array.isArray(entries) || !entries.length) continue;
-        const phonetics = entries.flatMap((e) => e.phonetics || []);
-        const result = {
-          word: entries[0].word,
-          phonetic: entries[0].phonetic || (phonetics.find((p) => p.text) || {}).text || '',
-          audio: (phonetics.find((p) => p.audio) || {}).audio || '',
-          meanings: entries
-            .flatMap((e) => e.meanings || [])
-            .map((m) => ({
-              pos: POS_ES[m.partOfSpeech] || m.partOfSpeech,
-              definitions: (m.definitions || []).slice(0, 3).map((d) => ({
-                definition: d.definition,
-                example: d.example || '',
-              })),
-            }))
-            .slice(0, 4),
-        };
-        cache.set(key, result);
-        return result;
-      } catch (error) {
-        if (error.status !== 404) break;
-      }
-    }
-    cache.set(key, null);
-    return null;
-  }
-
-  return { translate, define };
+  return { translate };
 })();
