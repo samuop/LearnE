@@ -8,6 +8,8 @@ LE.Panel = (() => {
   const vocabCount = document.getElementById('vocab-count');
   const reviewArea = document.getElementById('review-area');
   const reviewFilter = document.getElementById('review-filter');
+  const vocabScope = document.getElementById('vocab-scope');
+  const backupStatus = document.getElementById('backup-status');
 
   let lookupId = 0;
   let reviewMode = LE.storage.get('learne.reviewFilter', 'doc');
@@ -138,12 +140,12 @@ LE.Panel = (() => {
 
       const saveBtn = el('button', { class: 'btn primary' });
       const refreshSave = () => {
-        const saved = LE.Vocab.find(text);
+        const saved = LE.Vocab.find(text, docKey);
         saveBtn.textContent = saved ? '★ Guardada en tu vocabulario' : '☆ Guardar en vocabulario';
         saveBtn.classList.toggle('primary', !saved);
       };
       saveBtn.addEventListener('click', () => {
-        const saved = LE.Vocab.find(text);
+        const saved = LE.Vocab.find(text, docKey);
         if (saved) LE.Vocab.remove(saved.id);
         else
           LE.Vocab.add({
@@ -196,18 +198,35 @@ LE.Panel = (() => {
 
   /* ---------- Vocabulary list ---------- */
 
+  /* Words of the open PDF; with no PDF open, every saved word. */
+  function currentVocab() {
+    const docKey = LE.Viewer && LE.Viewer.docKey;
+    return docKey ? LE.Vocab.forDoc(docKey) : LE.Vocab.all();
+  }
+
   function renderVocab() {
+    const docKey = LE.Viewer.docKey;
+    const all = currentVocab();
+    vocabScope.textContent = '';
+    vocabScope.append(
+      docKey
+        ? el('span', {}, ['Palabras de ', el('b', { text: LE.Viewer.docName }), ` (${all.length})`])
+        : el('span', { text: 'Todas tus palabras. Abrí un PDF para ver solo las suyas.' })
+    );
+
     const query = vocabSearch.value.trim().toLowerCase();
-    const items = LE.Vocab.all().filter(
+    const items = all.filter(
       (i) => !query || i.term.toLowerCase().includes(query) || (i.translation || '').toLowerCase().includes(query)
     );
     vocabList.textContent = '';
-    if (!LE.Vocab.all().length) {
-      vocabList.append(el('li', { class: 'hint', text: 'Todavía no guardaste palabras. Cuando traduzcas una que te cueste, tocá “☆ Guardar en vocabulario”.' }));
+    if (!all.length) {
+      vocabList.append(el('li', { class: 'hint', text: docKey
+        ? 'Todavía no guardaste palabras de este PDF. Cuando traduzcas una que te cueste, tocá “☆ Guardar en vocabulario”.'
+        : 'Todavía no guardaste palabras.' }));
       return;
     }
     for (const item of items) {
-      const sameDoc = item.docKey && item.docKey === LE.Viewer.docKey;
+      const sameDoc = docKey && item.docKey === docKey;
       vocabList.append(
         el('li', { class: 'vocab-item' }, [
           el('span', { class: 'v-term', text: item.term }),
@@ -218,9 +237,9 @@ LE.Panel = (() => {
           ]),
           item.context ? el('span', { class: 'v-ctx' }, highlighted(item.context, item.term)) : null,
           el('span', { class: 'v-meta' }, [
-            [item.source, item.page ? 'pág. ' + item.page : ''].filter(Boolean).join(' · '),
-            sameDoc ? ' · ' : '',
-            sameDoc ? el('button', { class: 'link', onclick: () => LE.Viewer.goTo(item.page) }, 'ir a la página') : null,
+            [sameDoc ? '' : item.source, item.page ? 'pág. ' + item.page : ''].filter(Boolean).join(' · '),
+            sameDoc && item.page ? ' · ' : '',
+            sameDoc && item.page ? el('button', { class: 'link', onclick: () => LE.Viewer.goTo(item.page) }, 'ir a la página') : null,
           ]),
         ])
       );
@@ -229,22 +248,58 @@ LE.Panel = (() => {
   vocabSearch.addEventListener('input', renderVocab);
 
   document.getElementById('vocab-export').addEventListener('click', () => {
-    const blob = new Blob(['﻿' + LE.Vocab.toCSV()], { type: 'text/csv;charset=utf-8' });
-    const a = el('a', { href: URL.createObjectURL(blob), download: 'learne-vocabulario.csv' });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    const name = LE.Viewer.docKey ? LE.Viewer.docName : 'todos';
+    LE.download(`vocabulario-${name}.csv`, '\ufeff' + LE.Vocab.toCSV(currentVocab()), 'text/csv;charset=utf-8');
+  });
+
+  /* ---------- Backup ---------- */
+
+  function positions() {
+    const out = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('learne.pos.')) out[key.slice('learne.pos.'.length)] = LE.storage.get(key, 1);
+      }
+    } catch {
+      /* No storage: the backup just won't carry reading positions. */
+    }
+    return out;
+  }
+
+  document.getElementById('backup-save').addEventListener('click', () => {
+    const date = new Date().toISOString().slice(0, 10);
+    LE.download(`learne-copia-${date}.json`, LE.Vocab.backup({ positions: positions() }), 'application/json');
+    backupStatus.className = 'hint';
+    backupStatus.textContent = `Copia descargada con ${LE.Vocab.all().length} palabras de todos tus PDFs.`;
+  });
+
+  document.getElementById('backup-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const { added, updated, data } = LE.Vocab.restore(await file.text());
+      for (const [key, page] of Object.entries(data.positions || {})) {
+        if (LE.storage.get('learne.pos.' + key, null) == null) LE.storage.set('learne.pos.' + key, page);
+      }
+      backupStatus.className = 'hint';
+      backupStatus.textContent = `Copia restaurada: ${added} palabras nuevas, ${updated} actualizadas.`;
+    } catch (error) {
+      backupStatus.className = 'error';
+      backupStatus.textContent = error.message;
+    }
   });
 
   /* ---------- Flashcards ---------- */
 
   function reviewFilterFn() {
-    if (reviewMode === 'doc') return (i) => i.docKey && i.docKey === LE.Viewer.docKey;
+    const docKey = LE.Viewer.docKey;
+    if (reviewMode === 'doc') return (i) => !!docKey && i.docKey === docKey;
     if (reviewMode === 'today') {
       const start = new Date();
       start.setHours(0, 0, 0, 0);
-      return (i) => i.addedAt >= start.getTime();
+      return (i) => !!docKey && i.docKey === docKey && i.addedAt >= start.getTime();
     }
     return () => true;
   }
@@ -268,8 +323,8 @@ LE.Panel = (() => {
 
     if (!total) {
       const why = {
-        doc: LE.Viewer.docKey ? 'No guardaste palabras de este PDF todavía.' : 'Abrí un PDF para repasar sus palabras, o elegí “Todas”.',
-        today: 'Hoy no guardaste palabras todavía.',
+        doc: LE.Viewer.docKey ? 'No guardaste palabras de este PDF todavía.' : 'Abrí un PDF para repasar sus palabras, o elegí “Todos mis PDFs”.',
+        today: LE.Viewer.docKey ? 'Hoy no guardaste palabras de este PDF.' : 'Abrí un PDF para repasar lo que guardaste hoy, o elegí “Todos mis PDFs”.',
         all: 'Todavía no guardaste palabras.',
       }[reviewMode];
       reviewArea.append(el('p', { class: 'hint', text: why }));
@@ -290,6 +345,7 @@ LE.Panel = (() => {
       el('div', { class: 'fc-term', text: card.term }),
       el('div', { class: 'actions', style: 'justify-content:center' }, speakButtons(card.term)),
       card.context ? el('div', { class: 'fc-ctx' }, highlighted(card.context, card.term)) : null,
+      reviewMode === 'all' && card.source ? el('div', { class: 'fc-source', text: card.source }) : null,
       reviewRevealed ? answer : null,
     ]);
 
@@ -337,7 +393,7 @@ LE.Panel = (() => {
   /* ---------- Keep everything in sync ---------- */
 
   function refreshCount() {
-    vocabCount.textContent = LE.Vocab.all().length;
+    vocabCount.textContent = currentVocab().length;
   }
   LE.Vocab.onChange(() => {
     refreshCount();
@@ -345,5 +401,14 @@ LE.Panel = (() => {
   });
   refreshCount();
 
-  return { lookup, showTab, refreshReview: renderReview };
+  /* Called when a PDF is opened or closed: everything in the panel is per PDF. */
+  function onDocChange() {
+    refreshCount();
+    reviewCard = null;
+    sessionStats = { right: 0, wrong: 0 };
+    renderVocab();
+    renderReview();
+  }
+
+  return { lookup, showTab, onDocChange };
 })();

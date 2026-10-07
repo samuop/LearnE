@@ -56,6 +56,16 @@ LE.storage = {
   },
 };
 
+/* Offers a generated file to the user as a download. */
+LE.download = function download(filename, text, type) {
+  const blob = new Blob([text], { type });
+  const a = LE.el('a', { href: URL.createObjectURL(blob), download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
 /* Text-to-speech with the browser's built-in English voice. */
 LE.speak = function speak(text, rate) {
   if (!('speechSynthesis' in window)) return;

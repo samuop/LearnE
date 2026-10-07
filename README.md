@@ -13,12 +13,17 @@ Funciona en el navegador, sin instalar nada. **Tu PDF no se sube a ningún lado*
   **pronunciación** (🔊 normal y 🐢 lenta), símbolo fonético y **definición en inglés**.
 - **La oración donde aparece** la palabra, con botón para traducirla entera.
 - **Modo práctica**: la traducción aparece borrosa hasta que hacés clic, para que primero intentes entenderla vos.
-- **Vocabulario**: guardá con ☆ las palabras que te cuestan (se guarda la oración y la página).
-- **Repasar** con tarjetas: elegís repasar las palabras **de este PDF**, **guardadas hoy** o **todas**.
+- **Vocabulario por PDF**: guardá con ☆ las palabras que te cuestan (se guarda la oración y la página).
+  Cada PDF tiene su propio vocabulario y sus propias tarjetas.
+- **Palabras resaltadas**: las que ya guardaste aparecen marcadas en el PDF; tocá una para ver su traducción.
+- **Repasar** con tarjetas: **este PDF**, **guardadas hoy** (de este PDF) o **todos mis PDFs**.
   Las que marcás como "no la sabía" vuelven a salir antes.
-- **Exportar** el vocabulario a CSV (se puede importar en Anki).
-- Recuerda tus últimos PDFs y en qué página te quedaste: si recargás la página, el PDF se vuelve a abrir solo.
-  Con **Mis PDFs** ves la lista de **Seguir leyendo** (se guardan en tu navegador, no se suben a ningún lado).
+- **Exportar** el vocabulario del PDF a CSV (se puede importar en Anki).
+- **Copia de seguridad**: descargá un archivo con el vocabulario y el progreso de todos tus PDFs
+  y restauralo en otro navegador o dispositivo.
+- **Seguir leyendo**: recuerda tus PDFs y la página donde quedaste, **sin copiar los archivos**.
+  En Chrome o Edge de computadora, el PDF se vuelve a abrir solo al recargar (a lo sumo te pide permiso).
+  En el celular y en otros navegadores tocás el libro en la lista, elegís el archivo y seguís donde quedaste.
 - Zoom con dos dedos en el celular, o con Ctrl + rueda / pellizco del touchpad en la compu.
 
 ## Cómo abrirla
@@ -40,8 +45,9 @@ Descargá el repo (botón **Code → Download ZIP**), descomprimilo y abrí `ind
 - Los PDFs **escaneados** (fotos de páginas) no tienen texto seleccionable, así que no se pueden traducir.
 - El servicio de Google que usa no es oficial y puede limitar si hacés muchísimas consultas seguidas.
   En ese caso usa MyMemory como respaldo automático.
-- El vocabulario se guarda **en el navegador** donde lo usás. Si cambiás de navegador o de dispositivo,
-  no se pasa solo (podés exportarlo a CSV).
+- El vocabulario se guarda **en el navegador** donde lo usás. Para pasarlo a otro navegador o dispositivo,
+  usá **Copia de seguridad** (pestaña Vocabulario).
+- Cada PDF se reconoce por su nombre y tamaño: si le cambiás el nombre al archivo, se toma como un PDF nuevo.
 
 ## Detalles técnicos
 
@@ -58,7 +64,8 @@ css/styles.css    estilos (modo claro/oscuro y vista para celular)
 js/util.js        utilidades (DOM, limpieza de texto, voz)
 js/translator.js  traducción y diccionario
 js/vocab.js       vocabulario y repaso espaciado
-js/library.js     PDFs recientes guardados en el navegador (IndexedDB)
+js/library.js     PDFs recientes (sin copiar el archivo; acceso al archivo en Chrome/Edge)
+js/highlight.js   resaltado de las palabras guardadas en el PDF
 js/panel.js       panel lateral (traducción, vocabulario, tarjetas)
 js/viewer.js      visor de PDF
 js/app.js         une todo: abrir archivos, selección de texto, navegación
