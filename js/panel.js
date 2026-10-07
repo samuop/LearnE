@@ -81,6 +81,8 @@ LE.Panel = (() => {
 
     // The sentence around the selection is translated too: it shows what the word means here.
     let contextTranslation = '';
+    let contextSpan = null;
+    const wordTranslation = LE.Translator.translate(text);
     if (context && context.length > text.length + 10) {
       const ctxTr = el('div', { class: 'context-tr' }, [el('span', { class: 'spinner' }), 'Traduciendo la oración…']);
       resultBox.append(
@@ -91,12 +93,22 @@ LE.Panel = (() => {
           ctxTr,
         ])
       );
-      LE.Translator.translate(context).then(
-        (r) => {
+      LE.Translator.translateInContext(context, text).then(
+        async (r) => {
           if (id !== lookupId) return;
           contextTranslation = r.text;
+          contextSpan = r.span;
+          // No brackets came back: look for the word's own translation inside the sentence.
+          if (!contextSpan) {
+            const word = await wordTranslation.catch(() => null);
+            if (id !== lookupId) return;
+            if (word) {
+              const candidates = [word.text, ...word.alternatives.flatMap((a) => a.terms)];
+              contextSpan = LE.Translator.locate(r.text, candidates);
+            }
+          }
           ctxTr.textContent = '';
-          ctxTr.append(revealable(el('div', { text: r.text })));
+          ctxTr.append(revealable(el('div', {}, contextSpan ? highlighted(r.text, contextSpan) : [r.text])));
         },
         (error) => {
           if (id !== lookupId) return;
@@ -112,7 +124,7 @@ LE.Panel = (() => {
 
     let translation;
     try {
-      translation = await LE.Translator.translate(text);
+      translation = await wordTranslation;
     } catch (error) {
       if (id !== lookupId) return;
       trCard.lastChild.replaceWith(el('div', { class: 'error', text: error.message }));
@@ -148,6 +160,7 @@ LE.Panel = (() => {
             alternatives: translation.alternatives.map((a) => a.pos + ': ' + a.terms.slice(0, 3).join(', ')).join(' · '),
             context: context || '',
             contextTranslation,
+            contextSpan,
             source,
             docKey,
             page,
@@ -303,7 +316,9 @@ LE.Panel = (() => {
     const answer = el('div', { class: 'fc-answer' }, [
       el('div', { class: 'translation', text: card.translation }),
       card.alternatives ? el('div', { class: 'pos', text: card.alternatives }) : null,
-      card.contextTranslation ? el('div', { class: 'fc-ctx-tr', text: card.contextTranslation }) : null,
+      card.contextTranslation
+        ? el('div', { class: 'fc-ctx-tr' }, card.contextSpan ? highlighted(card.contextTranslation, card.contextSpan) : [card.contextTranslation])
+        : null,
     ]);
     const flashcard = el('div', { class: 'flashcard' }, [
       el('div', { class: 'fc-term', text: card.term }),

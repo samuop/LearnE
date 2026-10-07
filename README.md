@@ -11,7 +11,8 @@ Funciona en el navegador, sin instalar nada. **Tu PDF no se sube a ningún lado*
 - **Traducción al instante** de palabras, frases u oraciones seleccionadas.
 - Para palabras sueltas: **significados según el tipo de palabra** (sustantivo, verbo…)
   y **pronunciación** (🔊 normal y 🐢 lenta).
-- **La oración donde aparece** la palabra, traducida automáticamente: muestra qué significa la palabra en ese contexto.
+- **La oración donde aparece** la palabra, traducida automáticamente y con la parte seleccionada resaltada
+  también en la traducción: muestra qué significa la palabra en ese contexto.
   Al guardar la palabra se guarda también esa traducción, y aparece al dar vuelta la tarjeta.
 - **Modo práctica**: la traducción aparece borrosa hasta que hacés clic, para que primero intentes entenderla vos.
 - **Vocabulario por PDF**: guardá con ☆ las palabras que te cuestan (se guarda la oración y la página).
