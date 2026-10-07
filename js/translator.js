@@ -110,13 +110,17 @@ LE.Translator = (() => {
 
   const normalize = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-  /* Two Spanish words match if equal, or if long enough and sharing a stem (relacionarse ~ relacionan). */
+  /*
+   * Two Spanish words match if equal, if they share a stem of 5+ letters
+   * (relacionarse ~ relacionan) or if one is the other plus an ending (base ~ bases).
+   */
   function sameWord(a, b) {
     if (a === b) return true;
-    if (a.length < 4 || b.length < 4) return false;
+    const shorter = Math.min(a.length, b.length);
+    if (shorter < 4) return false;
     let common = 0;
-    while (common < a.length && common < b.length && a[common] === b[common]) common++;
-    return common >= Math.min(5, Math.min(a.length, b.length) - 1);
+    while (common < shorter && a[common] === b[common]) common++;
+    return common >= 5 || common === shorter;
   }
 
   /*
