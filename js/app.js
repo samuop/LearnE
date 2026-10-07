@@ -33,6 +33,9 @@
       const count = await LE.Viewer.open(data, key, file.name.replace(/\.pdf$/i, ''));
       LE.storage.set('learne.lastOpen', key);
       LE.Library.save(key, { name: file.name, size: file.size, numPages: count }, handle);
+      // Without a saved permission (phones), keep a copy of this one PDF so a reload can reopen it.
+      if (handle) LE.Library.clearCopy();
+      else LE.Library.keepCopy(key, file);
       currentName = file.name.replace(/\.pdf$/i, '');
       document.title = currentName + ' · LearnE';
       docName.textContent = file.name;
@@ -93,7 +96,13 @@
     libraryHint.hidden = false;
   }
 
+  let copiedKey = null; // which recent PDF has a copy in the browser (read when the list is drawn)
+
   async function reopen(item) {
+    if (item.key === copiedKey) {
+      const copy = await LE.Library.copyOf(item);
+      if (copy) return openFile(copy);
+    }
     if (!item.handle) {
       // No saved access (phones, Firefox, Safari): pick the file again; the app recognizes it.
       showHint(`Elegí el archivo «${item.name}» para seguir donde quedaste.`);
@@ -112,6 +121,7 @@
 
   async function renderRecent() {
     const items = await LE.Library.list();
+    copiedKey = await LE.Library.copyKey();
     recentList.textContent = '';
     recentSection.hidden = !items.length;
     for (const item of items) {
@@ -162,7 +172,7 @@
     const last = lastKey && items.find((i) => i.key === lastKey);
     if (!last || LE.Viewer.docKey) return;
     try {
-      const file = await LE.Library.fileFrom(last, false);
+      const file = (await LE.Library.copyOf(last)) || (await LE.Library.fileFrom(last, false));
       if (file && !LE.Viewer.docKey) return openFile(file, last.handle);
     } catch {
       /* Moved or deleted: the list below explains it when tapped. */

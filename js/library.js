@@ -1,11 +1,13 @@
 /*
- * Remembers the PDFs you opened, without copying them: only the name, the size and,
- * where the browser supports it (Chrome/Edge on a computer), a permission to read the
- * file where it already lives. Stored in IndexedDB.
+ * Remembers the PDFs you opened: the name, the size and, where the browser supports it
+ * (Chrome/Edge on a computer), a permission to read the file where it already lives.
+ * Where it doesn't (phones), only the PDF that is open right now is also copied, so a
+ * reload can reopen it; opening another PDF replaces that single copy. Stored in IndexedDB.
  */
 LE.Library = (() => {
   const DB_NAME = 'learne';
   const STORE = 'pdfs';
+  const COPY_STORE = 'copy'; // at most one record: { id: 'last', key, blob }
   const MAX_FILES = 12;
   let dbPromise = null;
 
@@ -15,8 +17,12 @@ LE.Library = (() => {
   function openDB() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onupgradeneeded = () => request.result.createObjectStore(STORE, { keyPath: 'key' });
+        const request = indexedDB.open(DB_NAME, 2);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' });
+          if (!db.objectStoreNames.contains(COPY_STORE)) db.createObjectStore(COPY_STORE, { keyPath: 'id' });
+        };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -24,11 +30,11 @@ LE.Library = (() => {
     return dbPromise;
   }
 
-  async function run(mode, fn) {
+  async function run(mode, fn, store = STORE) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, mode);
-      const request = fn(tx.objectStore(STORE));
+      const tx = db.transaction(store, mode);
+      const request = fn(tx.objectStore(store));
       tx.oncomplete = () => resolve(request && request.result);
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -72,8 +78,50 @@ LE.Library = (() => {
   async function remove(key) {
     try {
       await run('readwrite', (s) => s.delete(key));
+      const copy = await run('readonly', (s) => s.get('last'), COPY_STORE);
+      if (copy && copy.key === key) await clearCopy();
     } catch {
       /* Nothing to do: it simply stays in the list. */
+    }
+  }
+
+  /* ---------- The single copy of the open PDF ---------- */
+
+  async function keepCopy(key, file) {
+    try {
+      const copy = await run('readonly', (s) => s.get('last'), COPY_STORE);
+      if (copy && copy.key === key) return;
+      await run('readwrite', (s) => s.put({ id: 'last', key, blob: file }), COPY_STORE);
+    } catch (error) {
+      console.warn('No se pudo guardar la copia del PDF abierto:', error);
+    }
+  }
+
+  async function clearCopy() {
+    try {
+      await run('readwrite', (s) => s.delete('last'), COPY_STORE);
+    } catch {
+      /* Nothing stored. */
+    }
+  }
+
+  /* Which PDF the copy is of (its key), or null. */
+  async function copyKey() {
+    try {
+      const copy = await run('readonly', (s) => s.get('last'), COPY_STORE);
+      return copy ? copy.key : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /* The copied file for this PDF, or null if the copy is of another one (or there is none). */
+  async function copyOf(item) {
+    try {
+      const copy = await run('readonly', (s) => s.get('last'), COPY_STORE);
+      return copy && copy.key === item.key ? new File([copy.blob], item.name, { type: 'application/pdf' }) : null;
+    } catch {
+      return null;
     }
   }
 
@@ -103,5 +151,5 @@ LE.Library = (() => {
     }
   }
 
-  return { canKeepAccess, list, save, remove, fileFrom, pick };
+  return { canKeepAccess, list, save, remove, fileFrom, pick, keepCopy, clearCopy, copyOf, copyKey };
 })();

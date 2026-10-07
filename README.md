@@ -21,9 +21,10 @@ Funciona en el navegador, sin instalar nada. **Tu PDF no se sube a ningún lado*
 - **Exportar** el vocabulario del PDF a CSV (se puede importar en Anki).
 - **Copia de seguridad**: descargá un archivo con el vocabulario y el progreso de todos tus PDFs
   y restauralo en otro navegador o dispositivo.
-- **Seguir leyendo**: recuerda tus PDFs y la página donde quedaste, **sin copiar los archivos**.
-  En Chrome o Edge de computadora, el PDF se vuelve a abrir solo al recargar (a lo sumo te pide permiso).
-  En el celular y en otros navegadores tocás el libro en la lista, elegís el archivo y seguís donde quedaste.
+- **Seguir leyendo**: recuerda tus PDFs y la página donde quedaste.
+  En Chrome o Edge de computadora no se copia nada: el PDF se reabre desde donde está (a lo sumo te pide permiso).
+  En el celular y en otros navegadores se guarda una copia **solo del PDF abierto** para que vuelva solo al recargar;
+  al abrir otro, esa copia se reemplaza. Los demás libros de la lista se abren eligiendo el archivo de nuevo.
 - Zoom con dos dedos en el celular, o con Ctrl + rueda / pellizco del touchpad en la compu.
 
 ## Cómo abrirla
