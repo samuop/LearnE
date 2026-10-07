@@ -15,6 +15,7 @@ LE.Viewer = (() => {
 
   let pdf = null;
   let docKey = '';
+  let docName = '';
   let scale = 1.25;
   let pages = []; // { num, div, width, height, state: 'empty' | 'rendering' | 'done' | 'stale', generation }
   let generation = 0;
@@ -22,6 +23,7 @@ LE.Viewer = (() => {
   let observer = null;
   const pageListeners = new Set();
   const zoomListeners = new Set();
+  const textLayerListeners = new Set();
 
   document.addEventListener('mouseup', () => {
     container.querySelectorAll('.endOfContent.active').forEach((e) => e.classList.remove('active'));
@@ -33,10 +35,11 @@ LE.Viewer = (() => {
     return Math.max(MIN_SCALE, Math.min(1.5, fit));
   }
 
-  async function open(data, key) {
+  async function open(data, key, name) {
     close();
     pdf = await pdfjsLib.getDocument({ data }).promise;
     docKey = key;
+    docName = name || '';
 
     const first = await pdf.getPage(1);
     const base = first.getViewport({ scale: 1 });
@@ -63,6 +66,7 @@ LE.Viewer = (() => {
     pdf = null;
     pages = [];
     docKey = '';
+    docName = '';
     container.textContent = '';
     generation++;
   }
@@ -160,6 +164,7 @@ LE.Viewer = (() => {
       const end = LE.el('div', { class: 'endOfContent' });
       textLayer.append(end);
       textLayer.addEventListener('mousedown', () => end.classList.add('active'));
+      textLayerListeners.forEach((fn) => fn(textLayer, p.num));
 
       p.state = 'done';
       p.generation = gen;
@@ -303,6 +308,8 @@ LE.Viewer = (() => {
     get scale() { return scale; },
     get currentPage() { return currentPage; },
     get docKey() { return docKey; },
+    get docName() { return docName; },
+    onTextLayer: (fn) => textLayerListeners.add(fn),
     onPageChange: (fn) => pageListeners.add(fn),
   };
 })();

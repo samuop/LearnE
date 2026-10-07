@@ -10,7 +10,7 @@
   <header class="toolbar">
     <div class="brand">Learn<span>E</span></div>
 
-    <label class="btn primary" title="Abrir un PDF (también podés arrastrarlo a la ventana)">
+    <label class="btn primary" id="open-btn" title="Abrir un PDF (también podés arrastrarlo a la ventana)">
       Abrir PDF
       <input id="file-input" type="file" accept="application/pdf,.pdf" hidden>
     </label>
@@ -45,6 +45,7 @@
         </ol>
         <section id="recent" class="recent" hidden>
           <h2>Seguir leyendo</h2>
+          <p id="library-hint" class="library-hint" hidden></p>
           <ul id="recent-list" class="recent-list"></ul>
         </section>
       </div>
@@ -69,18 +70,36 @@
       </div>
 
       <div class="tab-body" data-tab-body="vocab" hidden>
+        <p id="vocab-scope" class="scope"></p>
         <div class="row">
           <input id="vocab-search" type="search" placeholder="Buscar en tu vocabulario…">
-          <button class="btn" id="vocab-export" title="Descargar CSV (sirve para importar en Anki)">Exportar</button>
+          <button class="btn" id="vocab-export" title="Descargar estas palabras en CSV (sirve para importar en Anki)">Exportar CSV</button>
         </div>
+        <label class="switch highlight-switch">
+          <input type="checkbox" id="highlight-toggle">
+          <span>Resaltar en el PDF las palabras que ya guardé</span>
+        </label>
         <ul id="vocab-list" class="vocab-list"></ul>
+
+        <section class="backup">
+          <h3>Copia de seguridad</h3>
+          <p class="hint">Guarda en un archivo el vocabulario y el progreso de todos tus PDFs. Sirve para no perderlo o para pasarlo a otro dispositivo.</p>
+          <div class="actions">
+            <button class="btn" id="backup-save">Descargar copia</button>
+            <label class="btn">
+              Restaurar copia
+              <input id="backup-file" type="file" accept=".json,application/json" hidden>
+            </label>
+          </div>
+          <p id="backup-status" class="hint"></p>
+        </section>
       </div>
 
       <div class="tab-body" data-tab-body="review" hidden>
         <div class="segmented" id="review-filter" role="radiogroup" aria-label="Qué palabras repasar">
           <button data-filter="doc" class="active">Este PDF</button>
           <button data-filter="today">Guardadas hoy</button>
-          <button data-filter="all">Todas</button>
+          <button data-filter="all">Todos mis PDFs</button>
         </div>
         <div id="review-area" class="review"></div>
       </div>
@@ -96,6 +115,7 @@
   <script src="js/library.js"></script>
   <script src="js/panel.js"></script>
   <script src="js/viewer.js"></script>
+  <script src="js/highlight.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

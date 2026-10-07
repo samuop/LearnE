@@ -13,11 +13,14 @@
   const recentSection = document.getElementById('recent');
   const recentList = document.getElementById('recent-list');
 
+  const openBtn = document.getElementById('open-btn');
+  const libraryHint = document.getElementById('library-hint');
+
   let currentName = '';
 
   /* ---------- Opening PDFs ---------- */
 
-  async function openFile(file) {
+  async function openFile(file, handle) {
     if (!file) return;
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
       alert('Ese archivo no parece un PDF.');
@@ -27,25 +30,53 @@
     try {
       const key = file.name + ':' + file.size;
       const data = new Uint8Array(await file.arrayBuffer());
-      const count = await LE.Viewer.open(data, key);
+      const count = await LE.Viewer.open(data, key, file.name.replace(/\.pdf$/i, ''));
       LE.storage.set('learne.lastOpen', key);
-      LE.Library.save(key, file, count);
+      LE.Library.save(key, { name: file.name, size: file.size, numPages: count }, handle);
       currentName = file.name.replace(/\.pdf$/i, '');
       document.title = currentName + ' · LearnE';
       docName.textContent = file.name;
+      libraryHint.hidden = true;
       emptyState.hidden = true;
       nav.hidden = false;
       libraryBtn.hidden = false;
       pageCount.textContent = count;
       pageInput.max = count;
       updateZoomLabel();
-      LE.Panel.refreshReview();
+      LE.Panel.onDocChange();
+      LE.Highlight.refresh();
     } catch (error) {
       console.error(error);
       docName.textContent = '';
       alert('No se pudo abrir el PDF: ' + error.message);
     }
   }
+
+  /* Where supported, open through the system picker so we can keep access to the file. */
+  async function chooseFile() {
+    if (!LE.Library.canKeepAccess) {
+      fileInput.click();
+      return;
+    }
+    try {
+      const picked = await LE.Library.pick();
+      if (picked) openFile(picked.file, picked.handle);
+    } catch (error) {
+      console.error(error);
+      fileInput.click();
+    }
+  }
+
+  openBtn.addEventListener('click', (e) => {
+    if (e.target === fileInput || !LE.Library.canKeepAccess) return;
+    e.preventDefault();
+    chooseFile();
+  });
+
+  fileInput.addEventListener('change', () => {
+    openFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
 
   /* ---------- Recent PDFs ("Seguir leyendo") ---------- */
 
@@ -57,20 +88,45 @@
     return new Date(ms).toLocaleDateString('es');
   }
 
+  function showHint(text) {
+    libraryHint.textContent = text;
+    libraryHint.hidden = false;
+  }
+
+  async function reopen(item) {
+    if (!item.handle) {
+      // No saved access (phones, Firefox, Safari): pick the file again; the app recognizes it.
+      showHint(`Elegí el archivo «${item.name}» para seguir donde quedaste.`);
+      chooseFile();
+      return;
+    }
+    try {
+      const file = await LE.Library.fileFrom(item, true);
+      if (file) return openFile(file, item.handle);
+      showHint(`Para abrir «${item.name}» tenés que permitir el acceso al archivo.`);
+    } catch {
+      showHint(`No encontré «${item.name}» donde estaba (¿lo moviste o le cambiaste el nombre?). Elegilo de nuevo.`);
+      chooseFile();
+    }
+  }
+
   async function renderRecent() {
     const items = await LE.Library.list();
     recentList.textContent = '';
     recentSection.hidden = !items.length;
     for (const item of items) {
       const page = LE.storage.get('learne.pos.' + item.key, 1);
+      const words = LE.Vocab.forDoc(item.key).length;
+      const meta = [
+        `Página ${page}${item.numPages ? ' de ' + item.numPages : ''}`,
+        words ? `${words} ${words === 1 ? 'palabra' : 'palabras'}` : '',
+        formatDate(item.lastOpened),
+      ].filter(Boolean).join(' · ');
       recentList.append(
         LE.el('li', { class: 'recent-item' }, [
-          LE.el('button', { class: 'recent-open', onclick: () => openFile(new File([item.blob], item.name, { type: 'application/pdf' })) }, [
+          LE.el('button', { class: 'recent-open', onclick: () => reopen(item) }, [
             LE.el('span', { class: 'recent-name', text: item.name.replace(/\.pdf$/i, '') }),
-            LE.el('span', {
-              class: 'recent-meta',
-              text: `Página ${page}${item.numPages ? ' de ' + item.numPages : ''} · ${formatDate(item.lastOpened)}`,
-            }),
+            LE.el('span', { class: 'recent-meta', text: meta }),
           ]),
           LE.el('button', {
             class: 'btn small',
@@ -95,21 +151,26 @@
     nav.hidden = true;
     libraryBtn.hidden = true;
     emptyState.hidden = false;
+    LE.Panel.onDocChange();
     renderRecent();
   }
   libraryBtn.addEventListener('click', showLibrary);
 
-  // Reopen the PDF that was open before a reload.
-  renderRecent().then((items) => {
+  // After a reload, reopen the PDF that was open if the browser still lets us read it.
+  renderRecent().then(async (items) => {
     const lastKey = LE.storage.get('learne.lastOpen', null);
     const last = lastKey && items.find((i) => i.key === lastKey);
-    if (last && !LE.Viewer.docKey) openFile(new File([last.blob], last.name, { type: 'application/pdf' }));
+    if (!last || LE.Viewer.docKey) return;
+    try {
+      const file = await LE.Library.fileFrom(last, false);
+      if (file && !LE.Viewer.docKey) return openFile(file, last.handle);
+    } catch {
+      /* Moved or deleted: the list below explains it when tapped. */
+    }
+    showHint(`Tocá «${last.name.replace(/\.pdf$/i, '')}» para seguir leyendo.`);
   });
 
-  fileInput.addEventListener('change', () => {
-    openFile(fileInput.files[0]);
-    fileInput.value = '';
-  });
+  /* ---------- Drag and drop ---------- */
 
   let dragDepth = 0;
   window.addEventListener('dragenter', (e) => {
@@ -122,11 +183,16 @@
     if (!dragDepth) dropOverlay.hidden = true;
   });
   window.addEventListener('dragover', (e) => e.preventDefault());
-  window.addEventListener('drop', (e) => {
+  window.addEventListener('drop', async (e) => {
     e.preventDefault();
     dragDepth = 0;
     dropOverlay.hidden = true;
-    openFile(e.dataTransfer.files[0]);
+    const file = e.dataTransfer.files[0];
+    const item = e.dataTransfer.items && e.dataTransfer.items[0];
+    // Must be requested synchronously, while the drop event is still being handled.
+    const handlePromise = item && item.getAsFileSystemHandle ? item.getAsFileSystemHandle().catch(() => null) : null;
+    const handle = handlePromise ? await handlePromise : null;
+    openFile(file, handle && handle.kind === 'file' ? handle : null);
   });
 
   /* ---------- Navigation and zoom ---------- */
@@ -158,9 +224,13 @@
     let full = '';
     let start = -1;
     let end = -1;
+    let lastOwner = null;
     const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (full && !/\s$/.test(full)) full += ' ';
+      // Each span of the text layer is a run of text; highlight marks split a span but not its words.
+      const owner = node.parentElement.closest('.textLayer span') || node.parentElement;
+      if (full && owner !== lastOwner && !/\s$/.test(full)) full += ' ';
+      lastOwner = owner;
       if (node === range.startContainer) start = full.length + range.startOffset;
       if (node === range.endContainer) end = full.length + range.endOffset;
       full += node.textContent;
@@ -189,7 +259,11 @@
     const node = anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor;
     if (!node || !viewer.contains(node)) return;
 
-    let text = LE.cleanText(selection.toString());
+    lookupRange(range, selection.toString(), node);
+  }
+
+  function lookupRange(range, rawText, node) {
+    let text = LE.cleanText(rawText);
     if (!text) return;
     if (text.split(' ').length === 1) text = LE.trimPunctuation(text);
     if (!text || text === lastText) return;
@@ -208,6 +282,18 @@
   }
 
   viewer.addEventListener('mouseup', () => setTimeout(handleSelection, 10));
+
+  // A tap or click on a highlighted (already saved) word shows it right away.
+  viewer.addEventListener('click', (e) => {
+    const mark = e.target.closest('mark.saved-word');
+    const selection = window.getSelection();
+    if (!mark || (selection && !selection.isCollapsed)) return;
+    const range = document.createRange();
+    range.setStart(mark.firstChild, 0);
+    range.setEnd(mark.firstChild, mark.firstChild.length);
+    lastText = '';
+    lookupRange(range, mark.dataset.term || mark.textContent, mark);
+  });
 
   // Touch devices don't fire mouseup reliably after adjusting the selection handles.
   let mouseDown = false;
