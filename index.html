@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LearnE · Leer en inglés</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">Learn<span>E</span></div>
+
+    <label class="btn primary" title="Abrir un PDF (también podés arrastrarlo a la ventana)">
+      Abrir PDF
+      <input id="file-input" type="file" accept="application/pdf,.pdf" hidden>
+    </label>
+
+    <span id="doc-name" class="doc-name"></span>
+
+    <div class="nav" id="nav" hidden>
+      <button class="btn icon" id="prev-page" title="Página anterior">‹</button>
+      <input id="page-input" type="number" min="1" value="1" aria-label="Página">
+      <span class="muted">/ <span id="page-count">0</span></span>
+      <button class="btn icon" id="next-page" title="Página siguiente">›</button>
+      <span class="sep"></span>
+      <button class="btn icon" id="zoom-out" title="Alejar">−</button>
+      <span id="zoom-label" class="muted zoom-label">100%</span>
+      <button class="btn icon" id="zoom-in" title="Acercar">+</button>
+    </div>
+
+    <button class="btn" id="toggle-panel" title="Mostrar u ocultar el panel">Panel</button>
+  </header>
+
+  <main class="layout">
+    <section id="viewer" class="viewer">
+      <div id="empty-state" class="empty-state">
+        <h1>Leé tus PDFs en inglés y aprendé mientras estudiás</h1>
+        <ol>
+          <li>Abrí un PDF con el botón <b>Abrir PDF</b> o arrastralo acá.</li>
+          <li><b>Doble clic</b> en una palabra, o seleccioná una frase u oración.</li>
+          <li>La traducción aparece en el panel de la derecha, con pronunciación y definición en inglés.</li>
+          <li>Guardá las palabras que te cuesten y repasalas después con tarjetas.</li>
+        </ol>
+      </div>
+      <div id="pages" class="pages"></div>
+    </section>
+
+    <aside id="panel" class="panel">
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="translate" role="tab">Traducir</button>
+        <button class="tab" data-tab="vocab" role="tab">Vocabulario <span id="vocab-count" class="badge">0</span></button>
+        <button class="tab" data-tab="review" role="tab">Repasar</button>
+      </nav>
+
+      <div class="tab-body" data-tab-body="translate">
+        <label class="switch" title="Oculta la traducción hasta que hagas clic, para que primero intentes entenderla vos">
+          <input type="checkbox" id="practice-mode">
+          <span>Modo práctica: pensalo antes de ver la traducción</span>
+        </label>
+        <div id="translate-result" class="result">
+          <p class="hint">Hacé doble clic en una palabra o seleccioná una oración del PDF.</p>
+        </div>
+      </div>
+
+      <div class="tab-body" data-tab-body="vocab" hidden>
+        <div class="row">
+          <input id="vocab-search" type="search" placeholder="Buscar en tu vocabulario…">
+          <button class="btn" id="vocab-export" title="Descargar CSV (sirve para importar en Anki)">Exportar</button>
+        </div>
+        <ul id="vocab-list" class="vocab-list"></ul>
+      </div>
+
+      <div class="tab-body" data-tab-body="review" hidden>
+        <div class="segmented" id="review-filter" role="radiogroup" aria-label="Qué palabras repasar">
+          <button data-filter="doc" class="active">Este PDF</button>
+          <button data-filter="today">Guardadas hoy</button>
+          <button data-filter="all">Todas</button>
+        </div>
+        <div id="review-area" class="review"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div id="drop-overlay" class="drop-overlay" hidden>Soltá el PDF para abrirlo</div>
+
+  <script src="vendor/pdfjs/pdf.min.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/translator.js"></script>
+  <script src="js/vocab.js"></script>
+  <script src="js/panel.js"></script>
+  <script src="js/viewer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

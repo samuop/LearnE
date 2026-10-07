@@ -1,0 +1,349 @@
+/* Side panel: translation result, vocabulary list and flashcard review. */
+LE.Panel = (() => {
+  const { el } = LE;
+  const resultBox = document.getElementById('translate-result');
+  const practiceToggle = document.getElementById('practice-mode');
+  const vocabList = document.getElementById('vocab-list');
+  const vocabSearch = document.getElementById('vocab-search');
+  const vocabCount = document.getElementById('vocab-count');
+  const reviewArea = document.getElementById('review-area');
+  const reviewFilter = document.getElementById('review-filter');
+
+  let lookupId = 0;
+  let reviewMode = LE.storage.get('learne.reviewFilter', 'doc');
+  let reviewCard = null;
+  let reviewRevealed = false;
+  let sessionStats = { right: 0, wrong: 0 };
+
+  practiceToggle.checked = LE.storage.get('learne.practice', false);
+  practiceToggle.addEventListener('change', () => LE.storage.set('learne.practice', practiceToggle.checked));
+
+  /* ---------- Tabs ---------- */
+
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('[data-tab-body]').forEach((b) => (b.hidden = b.dataset.tabBody !== name));
+    if (name === 'vocab') renderVocab();
+    if (name === 'review') renderReview();
+  }
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
+
+  /* ---------- Shared pieces ---------- */
+
+  function speakButtons(text) {
+    return [
+      el('button', { class: 'btn small', title: 'Escuchar', onclick: () => LE.speak(text) }, '🔊'),
+      el('button', { class: 'btn small', title: 'Escuchar lento', onclick: () => LE.speak(text, 0.6) }, '🐢'),
+    ];
+  }
+
+  /* Wraps content so that, in practice mode, it stays blurred until clicked. */
+  function revealable(content, forceHidden) {
+    const hidden = forceHidden != null ? forceHidden : practiceToggle.checked;
+    const box = el('div', { class: 'reveal' + (hidden ? ' hidden-answer' : '') }, [
+      content,
+      el('div', { class: 'reveal-hint', text: 'Pensalo… y hacé clic para ver' }),
+    ]);
+    box.addEventListener('click', () => box.classList.remove('hidden-answer'));
+    return box;
+  }
+
+  function highlighted(context, term) {
+    const index = context.toLowerCase().indexOf(term.toLowerCase());
+    if (index < 0) return [context];
+    return [
+      context.slice(0, index),
+      el('mark', { text: context.slice(index, index + term.length) }),
+      context.slice(index + term.length),
+    ];
+  }
+
+  /* ---------- Translation ---------- */
+
+  async function lookup({ text, context, page, source, docKey }) {
+    const id = ++lookupId;
+    showTab('translate');
+
+    const single = LE.isSingleWord(text);
+    const isLong = text.length > 60;
+    resultBox.textContent = '';
+
+    const head = el('div', { class: 'term-row' }, [
+      el('p', { class: 'term' + (isLong ? ' long' : ''), text }),
+      ...speakButtons(text),
+    ]);
+    const phonetic = el('div', { class: 'phonetic' });
+    const trCard = el('div', { class: 'card' }, [
+      el('h3', { text: 'Traducción' }),
+      el('div', {}, [el('span', { class: 'spinner' }), 'Traduciendo…']),
+    ]);
+    resultBox.append(head, phonetic, trCard);
+
+    const defCard = single ? el('div', { class: 'card' }) : null;
+    if (defCard) resultBox.append(defCard);
+
+    let ctxCard = null;
+    if (context && context.length > text.length + 10) {
+      const ctxTr = el('div', { class: 'context-tr' });
+      const ctxBtn = el('button', { class: 'btn small' }, 'Traducir oración');
+      ctxBtn.addEventListener('click', async () => {
+        ctxBtn.disabled = true;
+        ctxTr.textContent = 'Traduciendo…';
+        try {
+          const r = await LE.Translator.translate(context);
+          ctxTr.textContent = '';
+          ctxTr.append(revealable(el('div', { text: r.text })));
+        } catch (error) {
+          ctxTr.textContent = error.message;
+          ctxTr.className = 'context-tr error';
+          ctxBtn.disabled = false;
+        }
+      });
+      ctxCard = el('div', { class: 'card' }, [
+        el('h3', { text: 'En el texto' }),
+        el('div', { class: 'context' }, highlighted(context, text)),
+        el('div', { class: 'actions' }, [ctxBtn, ...speakButtons(context)]),
+        ctxTr,
+      ]);
+      resultBox.append(ctxCard);
+    }
+
+    const actions = el('div', { class: 'actions' });
+    const provider = el('div', { class: 'provider' });
+    resultBox.append(actions, provider);
+
+    const definitionPromise = single ? LE.Translator.define(text).catch(() => null) : Promise.resolve(null);
+
+    let translation;
+    try {
+      translation = await LE.Translator.translate(text);
+    } catch (error) {
+      if (id !== lookupId) return;
+      trCard.lastChild.replaceWith(el('div', { class: 'error', text: error.message }));
+    }
+    if (id !== lookupId) return;
+
+    if (translation) {
+      const body = el('div', {}, [
+        el('div', { class: 'translation' + (isLong ? ' long' : ''), text: translation.text }),
+        ...translation.alternatives.map((alt) =>
+          el('div', { class: 'pos-group' }, [
+            el('span', { class: 'pos', text: alt.pos + ': ' }),
+            alt.terms.join(', '),
+          ])
+        ),
+      ]);
+      trCard.lastChild.replaceWith(revealable(body));
+      provider.textContent = 'Traducido con ' + translation.provider;
+
+      const saveBtn = el('button', { class: 'btn primary' });
+      const refreshSave = () => {
+        const saved = LE.Vocab.find(text);
+        saveBtn.textContent = saved ? '★ Guardada en tu vocabulario' : '☆ Guardar en vocabulario';
+        saveBtn.classList.toggle('primary', !saved);
+      };
+      saveBtn.addEventListener('click', () => {
+        const saved = LE.Vocab.find(text);
+        if (saved) LE.Vocab.remove(saved.id);
+        else
+          LE.Vocab.add({
+            term: text,
+            translation: translation.text,
+            alternatives: translation.alternatives.map((a) => a.pos + ': ' + a.terms.slice(0, 3).join(', ')).join(' · '),
+            context: context || '',
+            source,
+            docKey,
+            page,
+          });
+        refreshSave();
+      });
+      refreshSave();
+      actions.append(saveBtn);
+    }
+
+    if (defCard) {
+      const def = await definitionPromise;
+      if (id !== lookupId) return;
+      renderDefinition(defCard, def, phonetic);
+    }
+  }
+
+  function renderDefinition(card, def, phonetic) {
+    card.append(el('h3', { text: 'Definición en inglés' }));
+    if (!def) {
+      card.append(el('div', { class: 'hint', text: 'No se encontró en el diccionario (puede ser un término técnico o un nombre).' }));
+      return;
+    }
+    if (def.phonetic) phonetic.textContent = def.phonetic;
+    if (def.audio) {
+      const audioBtn = el('button', { class: 'btn small', title: 'Pronunciación grabada' }, '▶ Audio real');
+      audioBtn.addEventListener('click', () => new Audio(def.audio).play().catch(() => {}));
+      phonetic.append(' ', audioBtn);
+    }
+    for (const meaning of def.meanings) {
+      card.append(
+        el('div', { class: 'pos', text: meaning.pos }),
+        el(
+          'ol',
+          { class: 'defs' },
+          meaning.definitions.map((d) =>
+            el('li', {}, [d.definition, d.example ? el('div', { class: 'example', text: '“' + d.example + '”' }) : null])
+          )
+        )
+      );
+    }
+  }
+
+  /* ---------- Vocabulary list ---------- */
+
+  function renderVocab() {
+    const query = vocabSearch.value.trim().toLowerCase();
+    const items = LE.Vocab.all().filter(
+      (i) => !query || i.term.toLowerCase().includes(query) || (i.translation || '').toLowerCase().includes(query)
+    );
+    vocabList.textContent = '';
+    if (!LE.Vocab.all().length) {
+      vocabList.append(el('li', { class: 'hint', text: 'Todavía no guardaste palabras. Cuando traduzcas una que te cueste, tocá “☆ Guardar en vocabulario”.' }));
+      return;
+    }
+    for (const item of items) {
+      const sameDoc = item.docKey && item.docKey === LE.Viewer.docKey;
+      vocabList.append(
+        el('li', { class: 'vocab-item' }, [
+          el('span', { class: 'v-term', text: item.term }),
+          el('span', { class: 'v-tr', text: item.translation }),
+          el('div', { class: 'v-actions' }, [
+            el('button', { class: 'btn small', title: 'Escuchar', onclick: () => LE.speak(item.term) }, '🔊'),
+            el('button', { class: 'btn small', title: 'Borrar', onclick: () => LE.Vocab.remove(item.id) }, '✕'),
+          ]),
+          item.context ? el('span', { class: 'v-ctx' }, highlighted(item.context, item.term)) : null,
+          el('span', { class: 'v-meta' }, [
+            [item.source, item.page ? 'pág. ' + item.page : ''].filter(Boolean).join(' · '),
+            sameDoc ? ' · ' : '',
+            sameDoc ? el('button', { class: 'link', onclick: () => LE.Viewer.goTo(item.page) }, 'ir a la página') : null,
+          ]),
+        ])
+      );
+    }
+  }
+  vocabSearch.addEventListener('input', renderVocab);
+
+  document.getElementById('vocab-export').addEventListener('click', () => {
+    const blob = new Blob(['﻿' + LE.Vocab.toCSV()], { type: 'text/csv;charset=utf-8' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: 'learne-vocabulario.csv' });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  /* ---------- Flashcards ---------- */
+
+  function reviewFilterFn() {
+    if (reviewMode === 'doc') return (i) => i.docKey && i.docKey === LE.Viewer.docKey;
+    if (reviewMode === 'today') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      return (i) => i.addedAt >= start.getTime();
+    }
+    return () => true;
+  }
+
+  reviewFilter.querySelectorAll('button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.filter === reviewMode);
+    b.addEventListener('click', () => {
+      reviewMode = b.dataset.filter;
+      LE.storage.set('learne.reviewFilter', reviewMode);
+      reviewFilter.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      reviewCard = null;
+      sessionStats = { right: 0, wrong: 0 };
+      renderReview();
+    });
+  });
+
+  function renderReview() {
+    const filter = reviewFilterFn();
+    const total = LE.Vocab.all().filter(filter).length;
+    reviewArea.textContent = '';
+
+    if (!total) {
+      const why = {
+        doc: LE.Viewer.docKey ? 'No guardaste palabras de este PDF todavía.' : 'Abrí un PDF para repasar sus palabras, o elegí “Todas”.',
+        today: 'Hoy no guardaste palabras todavía.',
+        all: 'Todavía no guardaste palabras.',
+      }[reviewMode];
+      reviewArea.append(el('p', { class: 'hint', text: why }));
+      return;
+    }
+
+    if (!reviewCard || !LE.Vocab.all().some((i) => i.id === reviewCard.id && filter(i))) {
+      reviewCard = LE.Vocab.nextToReview(filter);
+      reviewRevealed = false;
+    }
+    const card = reviewCard;
+
+    const answer = el('div', { class: 'fc-answer' }, [
+      el('div', { class: 'translation', text: card.translation }),
+      card.alternatives ? el('div', { class: 'pos', text: card.alternatives }) : null,
+    ]);
+    const flashcard = el('div', { class: 'flashcard' }, [
+      el('div', { class: 'fc-term', text: card.term }),
+      el('div', { class: 'actions', style: 'justify-content:center' }, speakButtons(card.term)),
+      card.context ? el('div', { class: 'fc-ctx' }, highlighted(card.context, card.term)) : null,
+      reviewRevealed ? answer : null,
+    ]);
+
+    const actions = el('div', { class: 'actions' });
+    if (!reviewRevealed) {
+      actions.append(
+        el('button', {
+          class: 'btn primary',
+          onclick: () => {
+            reviewRevealed = true;
+            renderReview();
+          },
+        }, 'Mostrar traducción')
+      );
+    } else {
+      const next = (knew) => {
+        LE.Vocab.grade(card.id, knew);
+        sessionStats[knew ? 'right' : 'wrong']++;
+        reviewCard = LE.Vocab.nextToReview(filter, card.id);
+        reviewRevealed = false;
+        renderReview();
+      };
+      actions.append(
+        el('button', { class: 'btn bad', onclick: () => next(false) }, '✗ No la sabía'),
+        el('button', { class: 'btn good', onclick: () => next(true) }, '✓ La sabía')
+      );
+    }
+
+    const learned = LE.Vocab.all().filter((i) => filter(i) && i.box >= 3).length;
+    reviewArea.append(
+      el('p', {
+        class: 'review-stats',
+        text: `${total} ${total === 1 ? 'palabra' : 'palabras'} · ${learned} ya bastante aprendidas`,
+      }),
+      flashcard,
+      actions
+    );
+    if (sessionStats.right + sessionStats.wrong) {
+      reviewArea.append(
+        el('p', { class: 'review-stats', text: `En este repaso: ${sessionStats.right} bien, ${sessionStats.wrong} para practicar más` })
+      );
+    }
+  }
+
+  /* ---------- Keep everything in sync ---------- */
+
+  function refreshCount() {
+    vocabCount.textContent = LE.Vocab.all().length;
+  }
+  LE.Vocab.onChange(() => {
+    refreshCount();
+    if (!document.querySelector('[data-tab-body="vocab"]').hidden) renderVocab();
+  });
+  refreshCount();
+
+  return { lookup, showTab, refreshReview: renderReview };
+})();
