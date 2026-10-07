@@ -21,11 +21,12 @@ Funciona en el navegador, sin instalar nada. **Tu PDF no se sube a ningún lado*
 
 ## Cómo abrirla
 
-**Opción A: con un link (recomendada, sirve también para el celular)**
+**Opción A: publicada automáticamente con GitHub Pages (recomendada, sirve también para el celular)**
 
-1. En GitHub, entrá a tu repo → **Settings** → **Pages**.
-2. En *Build and deployment*, elegí **Deploy from a branch**, la rama `main` y la carpeta `/ (root)`. Guardá.
-3. En uno o dos minutos queda en `https://samuop.github.io/LearnE/`.
+1. Este repo incluye el workflow `.github/workflows/pages.yml`, que publica automáticamente el contenido de la raíz en cada `push` a `main`.
+2. En GitHub, entrá a tu repo → **Settings** → **Pages**.
+3. En *Build and deployment*, elegí **GitHub Actions** como *Source*. Guardá.
+4. Después de cada push a `main`, la app se publica en `https://samuop.github.io/LearnE/`.
 
 **Opción B: en tu computadora**
 
