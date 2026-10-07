@@ -62,6 +62,7 @@ LE.Viewer = (() => {
     if (pdf) pdf.destroy();
     pdf = null;
     pages = [];
+    docKey = '';
     container.textContent = '';
     generation++;
   }
@@ -294,6 +295,7 @@ LE.Viewer = (() => {
 
   return {
     open,
+    close,
     goTo,
     zoomIn: () => setScale(scale * 1.15),
     zoomOut: () => setScale(scale / 1.15),

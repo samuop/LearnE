@@ -17,7 +17,8 @@ Funciona en el navegador, sin instalar nada. **Tu PDF no se sube a ningún lado*
 - **Repasar** con tarjetas: elegís repasar las palabras **de este PDF**, **guardadas hoy** o **todas**.
   Las que marcás como "no la sabía" vuelven a salir antes.
 - **Exportar** el vocabulario a CSV (se puede importar en Anki).
-- Recuerda en qué página te quedaste en cada PDF.
+- Recuerda tus últimos PDFs y en qué página te quedaste: si recargás la página, el PDF se vuelve a abrir solo.
+  Con **Mis PDFs** ves la lista de **Seguir leyendo** (se guardan en tu navegador, no se suben a ningún lado).
 - Zoom con dos dedos en el celular, o con Ctrl + rueda / pellizco del touchpad en la compu.
 
 ## Cómo abrirla
@@ -57,6 +58,7 @@ css/styles.css    estilos (modo claro/oscuro y vista para celular)
 js/util.js        utilidades (DOM, limpieza de texto, voz)
 js/translator.js  traducción y diccionario
 js/vocab.js       vocabulario y repaso espaciado
+js/library.js     PDFs recientes guardados en el navegador (IndexedDB)
 js/panel.js       panel lateral (traducción, vocabulario, tarjetas)
 js/viewer.js      visor de PDF
 js/app.js         une todo: abrir archivos, selección de texto, navegación

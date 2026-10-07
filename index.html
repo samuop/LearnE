@@ -15,6 +15,8 @@
       <input id="file-input" type="file" accept="application/pdf,.pdf" hidden>
     </label>
 
+    <button class="btn" id="library-btn" title="Ver tus PDFs recientes" hidden>Mis PDFs</button>
+
     <span id="doc-name" class="doc-name"></span>
 
     <div class="nav" id="nav" hidden>
@@ -41,6 +43,10 @@
           <li>La traducción aparece en el panel de la derecha, con pronunciación y definición en inglés.</li>
           <li>Guardá las palabras que te cuesten y repasalas después con tarjetas.</li>
         </ol>
+        <section id="recent" class="recent" hidden>
+          <h2>Seguir leyendo</h2>
+          <ul id="recent-list" class="recent-list"></ul>
+        </section>
       </div>
       <div id="pages" class="pages"></div>
     </section>
@@ -87,6 +93,7 @@
   <script src="js/util.js"></script>
   <script src="js/translator.js"></script>
   <script src="js/vocab.js"></script>
+  <script src="js/library.js"></script>
   <script src="js/panel.js"></script>
   <script src="js/viewer.js"></script>
   <script src="js/app.js"></script>
