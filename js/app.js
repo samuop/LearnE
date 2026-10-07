@@ -9,6 +9,9 @@
   const zoomLabel = document.getElementById('zoom-label');
   const viewer = document.getElementById('viewer');
   const dropOverlay = document.getElementById('drop-overlay');
+  const libraryBtn = document.getElementById('library-btn');
+  const recentSection = document.getElementById('recent');
+  const recentList = document.getElementById('recent-list');
 
   let currentName = '';
 
@@ -22,13 +25,17 @@
     }
     docName.textContent = 'Abriendo ' + file.name + '…';
     try {
+      const key = file.name + ':' + file.size;
       const data = new Uint8Array(await file.arrayBuffer());
-      const count = await LE.Viewer.open(data, file.name + ':' + file.size);
+      const count = await LE.Viewer.open(data, key);
+      LE.storage.set('learne.lastOpen', key);
+      LE.Library.save(key, file, count);
       currentName = file.name.replace(/\.pdf$/i, '');
       document.title = currentName + ' · LearnE';
       docName.textContent = file.name;
       emptyState.hidden = true;
       nav.hidden = false;
+      libraryBtn.hidden = false;
       pageCount.textContent = count;
       pageInput.max = count;
       updateZoomLabel();
@@ -39,6 +46,65 @@
       alert('No se pudo abrir el PDF: ' + error.message);
     }
   }
+
+  /* ---------- Recent PDFs ("Seguir leyendo") ---------- */
+
+  function formatDate(ms) {
+    const days = Math.floor((Date.now() - ms) / 86400000);
+    if (days < 1) return 'hoy';
+    if (days === 1) return 'ayer';
+    if (days < 7) return 'hace ' + days + ' días';
+    return new Date(ms).toLocaleDateString('es');
+  }
+
+  async function renderRecent() {
+    const items = await LE.Library.list();
+    recentList.textContent = '';
+    recentSection.hidden = !items.length;
+    for (const item of items) {
+      const page = LE.storage.get('learne.pos.' + item.key, 1);
+      recentList.append(
+        LE.el('li', { class: 'recent-item' }, [
+          LE.el('button', { class: 'recent-open', onclick: () => openFile(new File([item.blob], item.name, { type: 'application/pdf' })) }, [
+            LE.el('span', { class: 'recent-name', text: item.name.replace(/\.pdf$/i, '') }),
+            LE.el('span', {
+              class: 'recent-meta',
+              text: `Página ${page}${item.numPages ? ' de ' + item.numPages : ''} · ${formatDate(item.lastOpened)}`,
+            }),
+          ]),
+          LE.el('button', {
+            class: 'btn small',
+            title: 'Quitar de la lista (tu vocabulario no se borra)',
+            onclick: async () => {
+              await LE.Library.remove(item.key);
+              renderRecent();
+            },
+          }, '✕'),
+        ])
+      );
+    }
+    return items;
+  }
+
+  function showLibrary() {
+    LE.Viewer.close();
+    LE.storage.set('learne.lastOpen', null);
+    currentName = '';
+    document.title = 'LearnE · Leer en inglés';
+    docName.textContent = '';
+    nav.hidden = true;
+    libraryBtn.hidden = true;
+    emptyState.hidden = false;
+    renderRecent();
+  }
+  libraryBtn.addEventListener('click', showLibrary);
+
+  // Reopen the PDF that was open before a reload.
+  renderRecent().then((items) => {
+    const lastKey = LE.storage.get('learne.lastOpen', null);
+    const last = lastKey && items.find((i) => i.key === lastKey);
+    if (last && !LE.Viewer.docKey) openFile(new File([last.blob], last.name, { type: 'application/pdf' }));
+  });
 
   fileInput.addEventListener('change', () => {
     openFile(fileInput.files[0]);
