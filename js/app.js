@@ -281,7 +281,22 @@
     if (document.body.classList.contains('panel-collapsed')) document.body.classList.remove('panel-collapsed');
   }
 
-  viewer.addEventListener('mouseup', () => setTimeout(handleSelection, 10));
+  /*
+   * Translate only once the selection stops changing, so dragging across a sentence
+   * doesn't send a request for every word along the way.
+   */
+  const AFTER_MOUSE_MS = 300; // mouse released: the selection is final
+  const AFTER_CHANGE_MS = 1000; // touch handles or keyboard: wait until it settles
+  let selectionTimer = null;
+  let mouseDown = false;
+  let touching = false;
+
+  function scheduleSelection(delay) {
+    clearTimeout(selectionTimer);
+    selectionTimer = setTimeout(handleSelection, delay);
+  }
+
+  viewer.addEventListener('mouseup', () => scheduleSelection(AFTER_MOUSE_MS));
 
   // A tap or click on a highlighted (already saved) word shows it right away.
   viewer.addEventListener('click', (e) => {
@@ -296,11 +311,9 @@
   });
 
   // Touch devices don't fire mouseup reliably after adjusting the selection handles.
-  let mouseDown = false;
-  let selectionTimer = null;
   document.addEventListener('selectionchange', () => {
     clearTimeout(selectionTimer);
-    if (!mouseDown) selectionTimer = setTimeout(handleSelection, 700);
+    if (!mouseDown && !touching) scheduleSelection(AFTER_CHANGE_MS);
   });
   viewer.addEventListener('mousedown', () => {
     mouseDown = true;
@@ -309,6 +322,15 @@
   document.addEventListener('mouseup', () => {
     mouseDown = false;
   });
+  viewer.addEventListener('touchstart', () => {
+    touching = true;
+    clearTimeout(selectionTimer);
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (e.touches.length) return;
+    touching = false;
+    if (!window.getSelection().isCollapsed) scheduleSelection(AFTER_CHANGE_MS);
+  }, { passive: true });
 
   // Left/right arrows change page when not typing.
   document.addEventListener('keydown', (e) => {
