@@ -14,7 +14,9 @@ LE.Panel = (() => {
   let lookupId = 0;
   let reviewMode = LE.storage.get('learne.reviewFilter', 'doc');
   let reviewCard = null;
-  let reviewRevealed = false;
+  let reviewQuestion = null; // the options for reviewCard (null: not enough words, plain card)
+  let reviewChoice = null; // index of the option picked, null while unanswered
+  let reviewRevealed = false; // plain card: translation shown · fill question: hint shown
   let sessionStats = { right: 0, wrong: 0 };
 
   practiceToggle.checked = LE.storage.get('learne.practice', false);
@@ -58,6 +60,40 @@ LE.Panel = (() => {
       el('mark', { text: context.slice(index, index + term.length) }),
       context.slice(index + term.length),
     ];
+  }
+
+  /* Cuts a long sentence down to the part around `term`, so it fits in a small space. */
+  function excerpt(context, term, max = 110) {
+    if (!context || context.length <= max) return context || '';
+    const index = Math.max(0, context.toLowerCase().indexOf(term.toLowerCase()));
+    let start = Math.max(0, index - Math.floor((max - term.length) / 2));
+    let end = Math.min(context.length, start + max);
+    start = Math.max(0, end - max);
+    return (start > 0 ? '…' : '') + context.slice(start, end).trim() + (end < context.length ? '…' : '');
+  }
+
+  /* ---------- Look-alike words ---------- */
+
+  /*
+   * "Parecidas que ya guardaste": saved words spelled like the one being translated
+   * (over, overhead, overlook…), each with its meaning and its sentence, to compare them.
+   */
+  function similarCard(term, docKey) {
+    const list = LE.Vocab.similar(term);
+    if (!list.length) return null;
+    return el('div', { class: 'card similar' }, [
+      el('h3', { text: 'Parecidas que ya guardaste' }),
+      el('p', { class: 'similar-hint', text: 'Se escriben parecido pero no significan lo mismo. Comparalas:' }),
+      el('ul', { class: 'similar-list' }, list.map((item) => el('li', {}, [
+        el('div', { class: 'similar-row' }, [
+          el('button', { class: 'btn small', title: 'Escuchar', onclick: () => LE.speak(item.term) }, '🔊'),
+          el('b', { text: item.term }),
+          el('span', { class: 'similar-tr', text: item.contextSpan || item.translation }),
+        ]),
+        item.context ? el('div', { class: 'similar-ctx' }, highlighted(excerpt(item.context, item.term), item.term)) : null,
+        item.docKey !== docKey && item.source ? el('div', { class: 'similar-src', text: item.source }) : null,
+      ]))),
+    ]);
   }
 
   /* ---------- Translation ---------- */
@@ -120,7 +156,7 @@ LE.Panel = (() => {
 
     const actions = el('div', { class: 'actions' });
     const provider = el('div', { class: 'provider' });
-    resultBox.append(actions, provider);
+    resultBox.append(actions, similarCard(text, docKey), provider);
 
     let translation;
     try {
@@ -292,6 +328,89 @@ LE.Panel = (() => {
     });
   });
 
+  /*
+   * Duolingo-style review: instead of showing the translation, each card is a question
+   * with options to pick from. Two kinds:
+   *   - meaning: "¿Qué significa overlook en esta oración?" → pick the Spanish meaning.
+   *   - fill:    the sentence with a blank → pick the English word that goes there.
+   * Wrong options come first from look-alike words (oversee, overhead…), because telling
+   * those apart is the hard part; then from any other saved word.
+   */
+
+  const shuffle = (list) => {
+    const out = list.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+  const plain = (t) => (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+  /* What the word means in its own sentence; the dictionary translation when that's unknown. */
+  const meaningOf = (item) => item.contextSpan || item.translation || '';
+
+  /* Saved words (any PDF) to take wrong options from: look-alikes first, then the rest at random. */
+  function distractorPool(card) {
+    const own = card.term.toLowerCase();
+    const seen = new Set([own]);
+    const single = LE.isSingleWord(card.term);
+    const out = [];
+    const take = (item) => {
+      const key = item.term.toLowerCase();
+      if (seen.has(key) || LE.isSingleWord(item.term) !== single) return;
+      seen.add(key);
+      out.push(item);
+    };
+    LE.Vocab.similar(card.term, 10).forEach(take);
+    shuffle(LE.Vocab.all()).forEach(take);
+    return out;
+  }
+
+  function blankIndex(card) {
+    return card.context ? card.context.toLowerCase().indexOf(card.term.toLowerCase()) : -1;
+  }
+
+  function buildQuestion(card) {
+    const pool = distractorPool(card);
+
+    const meaning = () => {
+      const answer = meaningOf(card);
+      if (!answer) return null;
+      const used = new Set([plain(answer)]);
+      const wrong = [];
+      for (const item of pool) {
+        const text = meaningOf(item);
+        if (!text || used.has(plain(text))) continue;
+        used.add(plain(text));
+        wrong.push({ text, item });
+        if (wrong.length === 3) break;
+      }
+      if (!wrong.length) return null;
+      return { type: 'meaning', options: shuffle([{ text: answer, correct: true }, ...wrong]) };
+    };
+
+    const fill = () => {
+      const index = blankIndex(card);
+      if (index < 0 || !LE.isSingleWord(card.term)) return null;
+      const answer = card.context.slice(index, index + card.term.length);
+      const wrong = pool.slice(0, 3).map((item) => ({ text: item.term, item }));
+      if (!wrong.length) return null;
+      return { type: 'fill', index, options: shuffle([{ text: answer, correct: true }, ...wrong]) };
+    };
+
+    // New words start with "what does it mean"; once you know them a bit, also "complete the sentence".
+    const preferFill = card.box >= 1 && Math.random() < 0.5;
+    return preferFill ? fill() || meaning() : meaning() || fill();
+  }
+
+  function nextCard(filter, excludeId) {
+    reviewCard = LE.Vocab.nextToReview(filter, excludeId);
+    reviewQuestion = reviewCard ? buildQuestion(reviewCard) : null;
+    reviewChoice = null;
+    reviewRevealed = false;
+  }
+
   function renderReview() {
     const filter = reviewFilterFn();
     const total = LE.Vocab.all().filter(filter).length;
@@ -307,12 +426,133 @@ LE.Panel = (() => {
       return;
     }
 
-    if (!reviewCard || !LE.Vocab.all().some((i) => i.id === reviewCard.id && filter(i))) {
-      reviewCard = LE.Vocab.nextToReview(filter);
-      reviewRevealed = false;
-    }
-    const card = reviewCard;
+    if (!reviewCard || !LE.Vocab.all().some((i) => i.id === reviewCard.id && filter(i))) nextCard(filter);
 
+    const learned = LE.Vocab.all().filter((i) => filter(i) && i.box >= 3).length;
+    reviewArea.append(
+      el('p', {
+        class: 'review-stats',
+        text: `${total} ${total === 1 ? 'palabra' : 'palabras'} · ${learned} ya bastante aprendidas`,
+      })
+    );
+    reviewArea.append(...(reviewQuestion ? questionView(filter) : flashcardView(filter)));
+
+    if (sessionStats.right + sessionStats.wrong) {
+      reviewArea.append(
+        el('p', { class: 'review-stats', text: `En este repaso: ${sessionStats.right} bien, ${sessionStats.wrong} para practicar más` })
+      );
+    }
+  }
+
+  function continueReview(filter) {
+    nextCard(filter, reviewCard.id);
+    renderReview();
+  }
+
+  function choose(index) {
+    if (!reviewQuestion || reviewChoice != null) return;
+    const option = reviewQuestion.options[index];
+    if (!option) return;
+    reviewChoice = index;
+    LE.Vocab.grade(reviewCard.id, option.correct);
+    sessionStats[option.correct ? 'right' : 'wrong']++;
+    renderReview();
+    if (option.correct) LE.speak(reviewCard.term);
+  }
+
+  function questionView(filter) {
+    const card = reviewCard;
+    const q = reviewQuestion;
+    const answered = reviewChoice != null;
+    const picked = answered ? q.options[reviewChoice] : null;
+
+    const prompt =
+      q.type === 'meaning'
+        ? el('div', { class: 'q-prompt' }, [
+            '¿Qué significa ',
+            el('b', { text: card.term }),
+            card.context ? ' en esta oración?' : '?',
+            ' ',
+            ...speakButtons(card.term),
+          ])
+        : el('div', { class: 'q-prompt', text: 'Completá la oración con la palabra que falta' });
+
+    let sentence = null;
+    if (q.type === 'meaning' && card.context) {
+      sentence = el('div', { class: 'q-sentence' }, highlighted(card.context, card.term));
+    } else if (q.type === 'fill') {
+      const before = card.context.slice(0, q.index);
+      const after = card.context.slice(q.index + card.term.length);
+      const gap = answered
+        ? el('mark', { class: 'gap ok', text: card.context.slice(q.index, q.index + card.term.length) })
+        : el('span', { class: 'gap', text: '\u00a0' });
+      sentence = el('div', { class: 'q-sentence' }, [before, gap, after]);
+    }
+
+    // In "fill", the sentence in Spanish is an optional hint (it gives the meaning away).
+    let hint = null;
+    if (q.type === 'fill' && card.contextTranslation && !answered) {
+      hint = reviewRevealed
+        ? el('div', { class: 'q-hint' }, card.contextSpan ? highlighted(card.contextTranslation, card.contextSpan) : [card.contextTranslation])
+        : el('button', { class: 'link q-hint-btn', onclick: () => { reviewRevealed = true; renderReview(); } }, 'Ver pista (la oración en español)');
+    }
+
+    const options = el('div', { class: 'choices' + (q.type === 'fill' ? ' en' : '') }, q.options.map((option, i) => {
+      let state = '';
+      if (answered && option.correct) state = ' correct';
+      else if (answered && i === reviewChoice) state = ' wrong';
+      return el('button', {
+        class: 'choice' + state,
+        disabled: answered,
+        onclick: () => choose(i),
+      }, [el('span', { class: 'choice-key', text: String(i + 1) }), el('span', { text: option.text })]);
+    }));
+
+    const parts = [
+      el('div', { class: 'question' }, [
+        prompt,
+        sentence,
+        hint,
+        reviewMode === 'all' && card.source ? el('div', { class: 'fc-source', text: card.source }) : null,
+      ]),
+      options,
+    ];
+
+    if (answered) parts.push(feedbackView(card, q, picked), el('div', { class: 'actions' }, [
+      el('button', { class: 'btn primary continue', onclick: () => continueReview(filter) }, 'Continuar'),
+    ]));
+    return parts;
+  }
+
+  function feedbackView(card, q, picked) {
+    const correctText = q.options.find((o) => o.correct).text;
+    const lines = [];
+    if (picked.correct) {
+      lines.push(el('div', { class: 'fb-title', text: '¡Bien!' }));
+    } else {
+      lines.push(el('div', { class: 'fb-title' }, ['La respuesta era: ', el('b', { text: correctText })]));
+      // The point of the exercise: say whose meaning you picked, so the two don't blur together.
+      if (picked.item && q.type === 'meaning') {
+        lines.push(el('div', { class: 'fb-mix' }, [
+          '«' + picked.text + '» es lo que significa ', el('b', { text: picked.item.term }), '.',
+        ]));
+      } else if (picked.item && q.type === 'fill') {
+        lines.push(el('div', { class: 'fb-mix' }, [
+          el('b', { text: picked.item.term }), ' significa «' + (picked.item.translation || meaningOf(picked.item)) + '».',
+        ]));
+      }
+    }
+    lines.push(el('div', { class: 'fb-word' }, [el('b', { text: card.term }), ' = ' + meaningOf(card)]));
+    if (card.contextTranslation) {
+      lines.push(el('div', { class: 'fb-ctx' }, card.contextSpan ? highlighted(card.contextTranslation, card.contextSpan) : [card.contextTranslation]));
+    }
+    if (card.context) lines.push(el('div', { class: 'actions fb-listen' }, speakButtons(card.context)));
+    return el('div', { class: 'feedback ' + (picked.correct ? 'ok' : 'ko') }, lines);
+  }
+
+  /* Fallback when there aren't enough saved words to make options: the classic card. */
+  function flashcardView(filter) {
+    const card = reviewCard;
     const answer = el('div', { class: 'fc-answer' }, [
       el('div', { class: 'translation', text: card.translation }),
       card.alternatives ? el('div', { class: 'pos', text: card.alternatives }) : null,
@@ -331,43 +571,38 @@ LE.Panel = (() => {
     const actions = el('div', { class: 'actions' });
     if (!reviewRevealed) {
       actions.append(
-        el('button', {
-          class: 'btn primary',
-          onclick: () => {
-            reviewRevealed = true;
-            renderReview();
-          },
-        }, 'Mostrar traducción')
+        el('button', { class: 'btn primary', onclick: () => { reviewRevealed = true; renderReview(); } }, 'Mostrar traducción')
       );
     } else {
       const next = (knew) => {
         LE.Vocab.grade(card.id, knew);
         sessionStats[knew ? 'right' : 'wrong']++;
-        reviewCard = LE.Vocab.nextToReview(filter, card.id);
-        reviewRevealed = false;
-        renderReview();
+        continueReview(filter);
       };
       actions.append(
         el('button', { class: 'btn bad', onclick: () => next(false) }, '✗ No la sabía'),
         el('button', { class: 'btn good', onclick: () => next(true) }, '✓ La sabía')
       );
     }
-
-    const learned = LE.Vocab.all().filter((i) => filter(i) && i.box >= 3).length;
-    reviewArea.append(
-      el('p', {
-        class: 'review-stats',
-        text: `${total} ${total === 1 ? 'palabra' : 'palabras'} · ${learned} ya bastante aprendidas`,
-      }),
+    return [
+      el('p', { class: 'hint', text: 'Para repasar con opciones, guardá al menos otra palabra: de ahí salen las opciones incorrectas.' }),
       flashcard,
-      actions
-    );
-    if (sessionStats.right + sessionStats.wrong) {
-      reviewArea.append(
-        el('p', { class: 'review-stats', text: `En este repaso: ${sessionStats.right} bien, ${sessionStats.wrong} para practicar más` })
-      );
-    }
+      actions,
+    ];
   }
+
+  /* Keys 1–4 pick an option, Enter continues — only while the review tab is open. */
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.querySelector('[data-tab-body="review"]').hidden || !reviewQuestion) return;
+    if (/^[1-4]$/.test(e.key) && reviewChoice == null) {
+      e.preventDefault();
+      choose(Number(e.key) - 1);
+    } else if (e.key === 'Enter' && reviewChoice != null) {
+      e.preventDefault();
+      continueReview(reviewFilterFn());
+    }
+  });
 
   /* ---------- Keep everything in sync ---------- */
 

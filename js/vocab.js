@@ -63,6 +63,75 @@ LE.Vocab = (() => {
     save();
   }
 
+  /* ---------- Look-alike words ---------- */
+
+  /* English prefixes that build families of words learners mix up (over-, under-, out-…). */
+  const PREFIXES = ['over', 'under', 'out', 'up', 'down', 'back', 'off', 'after', 'fore', 'with', 'mis', 'dis', 'pre', 'sub', 'inter', 'trans'];
+
+  const letters = (t) => t.toLowerCase().replace(/[^a-z]/g, '');
+
+  function editDistance(a, b) {
+    if (Math.abs(a.length - b.length) > 2) return 3;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const row = [i];
+      for (let j = 1; j <= b.length; j++) {
+        row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = row;
+    }
+    return prev[b.length];
+  }
+
+  /*
+   * How much two single words look alike (0 = not at all). Catches:
+   *   - one built on the other: over ~ overhead, look ~ overlook
+   *   - same prefix or start: overlook ~ oversee, under ~ understand
+   *   - one or two letters apart: affect ~ effect, though ~ through
+   */
+  function likeness(a, b) {
+    a = letters(a);
+    b = letters(b);
+    if (a === b || a.length < 3 || b.length < 3) return 0;
+    const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+    let score = 0;
+
+    if (long.startsWith(short) || long.endsWith(short) || (short.length >= 4 && long.includes(short))) score = 3;
+
+    let common = 0;
+    while (common < short.length && a[common] === b[common]) common++;
+    if (common >= 4) score = Math.max(score, common >= 5 ? 2.5 : 2);
+    else if (PREFIXES.some((p) => a.startsWith(p) && b.startsWith(p) && a.length > p.length + 1 && b.length > p.length + 1)) {
+      score = Math.max(score, 2);
+    }
+
+    const distance = editDistance(a, b);
+    if (short.length >= 4 && distance === 1) score = Math.max(score, 2.5);
+    else if (short.length >= 6 && distance === 2) score = Math.max(score, 2);
+
+    return score;
+  }
+
+  /*
+   * Saved words (from every PDF) that look like `term`, most alike first,
+   * one entry per word. Only for single words: phrases have no look-alikes.
+   */
+  function similar(term, limit = 6) {
+    if (!LE.isSingleWord(term)) return [];
+    const seen = new Set([term.toLowerCase()]);
+    const found = [];
+    for (const item of items) {
+      const key = item.term.toLowerCase();
+      if (seen.has(key) || !LE.isSingleWord(item.term)) continue;
+      const score = likeness(term, item.term);
+      if (!score) continue;
+      seen.add(key);
+      found.push({ item, score });
+    }
+    found.sort((x, y) => y.score - x.score || x.item.term.length - y.item.term.length);
+    return found.slice(0, limit).map((f) => f.item);
+  }
+
   function toCSV(list) {
     const quote = (v) => '"' + String(v || '').replace(/"/g, '""') + '"';
     const rows = [['ingles', 'espanol', 'contexto', 'fuente', 'pagina']].concat(
@@ -122,6 +191,8 @@ LE.Vocab = (() => {
     remove,
     nextToReview,
     grade,
+    similar,
+    likeness,
     toCSV,
     backup,
     restore,

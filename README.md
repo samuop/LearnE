@@ -18,8 +18,14 @@ Funciona en el navegador, sin instalar nada. **Tu PDF no se sube a ningún lado*
 - **Vocabulario por PDF**: guardá con ☆ las palabras que te cuestan (se guarda la oración y la página).
   Cada PDF tiene su propio vocabulario y sus propias tarjetas.
 - **Palabras resaltadas**: las que ya guardaste aparecen marcadas en el PDF; tocá una para ver su traducción.
-- **Repasar** con tarjetas: **este PDF**, **guardadas hoy** (de este PDF) o **todos mis PDFs**.
-  Las que marcás como "no la sabía" vuelven a salir antes.
+- **Parecidas que ya guardaste**: al traducir una palabra, aparecen las de tu vocabulario que se escriben
+  parecido (*over*, *overhead*, *overlook*, *though*/*through*…) con su significado y su oración, para compararlas.
+- **Repasar con opciones**, al estilo Duolingo: en vez de mostrarte la traducción, elegís la respuesta correcta.
+  Hay dos tipos de pregunta: *¿qué significa esta palabra en esta oración?* y *completá la oración*.
+  Las opciones incorrectas salen primero de palabras parecidas, que son las que más se confunden,
+  y si te equivocás te dice de qué palabra era el significado que elegiste. Teclas 1–4 para elegir y Enter para seguir.
+  Se puede repasar **este PDF**, **guardadas hoy** (de este PDF) o **todos mis PDFs**;
+  las que fallás vuelven a salir antes.
 - **Exportar** el vocabulario del PDF a CSV (se puede importar en Anki).
 - **Copia de seguridad**: descargá un archivo con el vocabulario y el progreso de todos tus PDFs
   y restauralo en otro navegador o dispositivo.
