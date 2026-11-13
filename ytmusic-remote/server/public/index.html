@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b0b0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>YT Music Remote</title>
+<style>
+  :root { --fg: #fff; --dim: rgba(255,255,255,.62); --accent: #ff3b5c; --bg: #0b0b0b; }
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  #bg { position: fixed; inset: -40px; background-size: cover; background-position: center; filter: blur(40px) brightness(.45) saturate(1.3); transform: scale(1.1); transition: background-image .6s; z-index: 0; }
+  main { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; padding: calc(14px + env(safe-area-inset-top)) 22px calc(18px + env(safe-area-inset-bottom)); max-width: 480px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #e05555; }
+  .dot.on { background: #1db954; }
+  .art { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px 0; }
+  .art img, .art .ph { width: 100%; max-width: min(100%, 52vh); aspect-ratio: 1; object-fit: cover; border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.55); background: #222; }
+  .art .ph { display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 15px; text-align: center; padding: 20px; line-height: 1.45; }
+  .meta { display: flex; align-items: center; gap: 12px; }
+  .meta .txt { flex: 1; min-width: 0; }
+  .title { font-size: 21px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .artist { font-size: 15px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+  button { background: none; border: 0; color: var(--fg); padding: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation; }
+  button:active { transform: scale(.92); }
+  button svg { width: 26px; height: 26px; fill: currentColor; }
+  .icon-btn { width: 44px; height: 44px; border-radius: 50%; color: var(--dim); }
+  .icon-btn.active { color: var(--fg); }
+  .icon-btn.active.like { color: var(--accent); }
+  .badge { position: relative; }
+  .badge::after { content: attr(data-badge); position: absolute; font-size: 9px; font-weight: 800; right: 6px; bottom: 6px; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #fff var(--p, 0%), rgba(255,255,255,.25) var(--p, 0%)); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #fff var(--p, 0%), rgba(255,255,255,.25) var(--p, 0%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; margin-top: -5px; }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff; }
+  .seek { margin-top: 14px; }
+  .times { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; margin-top: -2px; }
+  .controls { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 8px; }
+  .controls .main { width: 72px; height: 72px; border-radius: 50%; background: #fff; color: #000; }
+  .controls .main svg { width: 38px; height: 38px; }
+  .controls .skip svg { width: 40px; height: 40px; }
+  .controls .skip { width: 56px; height: 56px; }
+  .vol { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .vol button { color: var(--dim); }
+  .vol button svg { width: 22px; height: 22px; }
+  #toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); background: rgba(30,30,30,.95); padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: .25s; z-index: 5; pointer-events: none; max-width: 90%; text-align: center; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .disabled .controls, .disabled .seek, .disabled .vol, .disabled .meta button { opacity: .35; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<main id="app" class="disabled">
+  <header><span class="dot" id="dot"></span><span id="conn">Conectando…</span></header>
+
+  <div class="art"><div class="ph" id="ph"><span>Abrí <b>music.youtube.com</b> en la PC</span></div><img id="art" alt="" hidden></div>
+
+  <div class="meta">
+    <button class="icon-btn" id="dislike" aria-label="No me gusta"><svg viewBox="0 0 24 24"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg></button>
+    <div class="txt"><div class="title" id="title">—</div><div class="artist" id="artist">&nbsp;</div></div>
+    <button class="icon-btn like" id="like" aria-label="Me gusta"><svg viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
+  </div>
+
+  <div class="seek">
+    <input type="range" id="seek" min="0" max="100" step="0.1" value="0" aria-label="Posición">
+    <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+  </div>
+
+  <div class="controls">
+    <button class="icon-btn" id="shuffle" aria-label="Aleatorio"><svg viewBox="0 0 24 24"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+    <button class="skip" id="prev" aria-label="Anterior"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+    <button class="main" id="toggle" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg></button>
+    <button class="skip" id="next" aria-label="Siguiente"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+    <button class="icon-btn badge" id="repeat" aria-label="Repetir" data-badge=""><svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>
+  </div>
+
+  <div class="vol">
+    <button id="mute" aria-label="Silenciar"><svg viewBox="0 0 24 24" id="volIcon"></svg></button>
+    <input type="range" id="volume" min="0" max="100" step="1" value="50" aria-label="Volumen">
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  let token = params.get('t') || '';
+  try {
+    if (token) localStorage.setItem('ytmr-token', token);
+    else token = localStorage.getItem('ytmr-token') || '';
+  } catch {}
+
+  const ICON = {
+    play: '<path d="M8 5v14l11-7z"/>',
+    pause: '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>',
+    vol: '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>',
+    volLow: '<path d="M7 9v6h4l5 5V4l-5 5H7z"/>',
+    mute: '<path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>',
+  };
+
+  let snap = null;          // último estado recibido
+  let recvAt = 0;           // cuándo lo recibimos (para avanzar el tiempo localmente)
+  let dragging = { seek: false, volume: false };
+  let pendingVolume = null; // valor que mandamos y aún no confirma la PC
+  let lastArt = '';
+
+  const fmt = (s) => { s = Math.max(0, Math.floor(s || 0)); const m = Math.floor(s / 60), r = s % 60; return m >= 60 ? `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}:${String(r).padStart(2,'0')}` : `${m}:${String(r).padStart(2,'0')}`; };
+  const setFill = (el) => el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min || 1)) * 100 + '%');
+
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+
+  async function send(action, value) {
+    if (navigator.vibrate) navigator.vibrate(10);
+    try {
+      const r = await fetch('/api/command?t=' + encodeURIComponent(token), {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, value }),
+      });
+      if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'No se pudo enviar');
+    } catch { toast('Sin conexión con la PC'); }
+  }
+
+  function currentTime() {
+    const s = snap && snap.state; if (!s) return 0;
+    let t = s.currentTime || 0;
+    if (s.playing) t += (Date.now() - recvAt) / 1000;
+    return Math.min(t, s.duration || t);
+  }
+
+  function render() {
+    const connected = snap && snap.connected;
+    const s = connected ? snap.state : null;
+    $('dot').classList.toggle('on', !!connected);
+    $('conn').textContent = !snap ? 'Conectando…' : connected ? 'Conectado a la PC' : 'Esperando a YouTube Music en la PC';
+    $('app').classList.toggle('disabled', !(s && s.hasTrack));
+
+    $('title').textContent = s && s.title ? s.title : '—';
+    $('artist').textContent = s ? [s.artist, s.album].filter(Boolean).join(' • ') || ' ' : ' ';
+    if (s && s.title) document.title = (s.playing ? '▶ ' : '') + s.title;
+
+    const art = s && s.artwork || '';
+    if (art !== lastArt) {
+      lastArt = art;
+      $('art').hidden = !art; $('ph').hidden = !!art;
+      if (art) { $('art').src = art; $('bg').style.backgroundImage = `url("${art.replace(/"/g, '%22')}")`; }
+      else $('bg').style.backgroundImage = '';
+    }
+
+    $('playIcon').innerHTML = s && s.playing ? ICON.pause : ICON.play;
+    $('like').classList.toggle('active', !!s && s.likeStatus === 'LIKE');
+    $('dislike').classList.toggle('active', !!s && s.likeStatus === 'DISLIKE');
+    $('shuffle').classList.toggle('active', !!s && s.shuffle);
+    const rep = s ? s.repeat : 'NONE';
+    $('repeat').classList.toggle('active', rep !== 'NONE');
+    $('repeat').dataset.badge = rep === 'ONE' ? '1' : '';
+
+    if (s && !dragging.volume) {
+      if (pendingVolume !== null && Math.abs(s.volume - pendingVolume) <= 1) pendingVolume = null;
+      $('volume').value = pendingVolume !== null ? pendingVolume : s.volume; setFill($('volume'));
+    }
+    const vol = Number($('volume').value);
+    $('volIcon').innerHTML = s && (s.muted || vol === 0) ? ICON.mute : vol < 50 ? ICON.volLow : ICON.vol;
+    tick();
+  }
+
+  function tick() {
+    const s = snap && snap.connected && snap.state;
+    if (!s || dragging.seek) return;
+    const d = s.duration || 0;
+    $('seek').max = d || 100;
+    $('seek').value = currentTime(); setFill($('seek'));
+    $('cur').textContent = fmt(currentTime());
+    $('dur').textContent = fmt(d);
+  }
+  setInterval(tick, 250);
+
+  // --- Conexión en vivo (Server-Sent Events) ---
+  function connect() {
+    if (!token) { $('conn').textContent = 'Falta el código: abrí el enlace o QR que muestra la extensión'; return; }
+    const es = new EventSource('/api/events?t=' + encodeURIComponent(token));
+    es.onmessage = (e) => { snap = JSON.parse(e.data); recvAt = Date.now(); render(); };
+    es.onerror = () => {
+      $('dot').classList.remove('on'); $('conn').textContent = 'Reconectando…';
+      // Si el token es inválido el navegador reintentaría para siempre: lo comprobamos.
+      fetch('/api/state?t=' + encodeURIComponent(token)).then((r) => {
+        if (r.status === 401) { es.close(); $('conn').textContent = 'Código inválido: volvé a escanear el QR de la extensión'; }
+      }).catch(() => {});
+    };
+  }
+  connect();
+
+  // --- Controles ---
+  for (const a of ['toggle', 'next', 'prev', 'like', 'dislike', 'shuffle', 'repeat', 'mute']) {
+    $(a).addEventListener('click', () => {
+      send(a);
+      // respuesta visual inmediata
+      if (a === 'toggle' && snap && snap.state) { snap.state.currentTime = currentTime(); recvAt = Date.now(); snap.state.playing = !snap.state.playing; render(); }
+    });
+  }
+
+  const seek = $('seek');
+  seek.addEventListener('input', () => { dragging.seek = true; setFill(seek); $('cur').textContent = fmt(seek.value); });
+  seek.addEventListener('change', () => {
+    const v = Number(seek.value);
+    send('seek', v);
+    if (snap && snap.state) { snap.state.currentTime = v; recvAt = Date.now(); }
+    dragging.seek = false; tick();
+  });
+
+  const vol = $('volume');
+  let volTimer = null;
+  vol.addEventListener('input', () => {
+    dragging.volume = true; setFill(vol);
+    clearTimeout(volTimer);
+    volTimer = setTimeout(() => { pendingVolume = Number(vol.value); send('volume', pendingVolume); }, 120);
+  });
+  vol.addEventListener('change', () => {
+    clearTimeout(volTimer); pendingVolume = Number(vol.value); send('volume', pendingVolume); dragging.volume = false;
+  });
+})();
+</script>
+</body>
+</html>
